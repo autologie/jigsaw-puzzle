@@ -3,11 +3,15 @@ module Main exposing (..)
 import Browser
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
-import Random
+import Random exposing (Seed)
 
 
 main =
-    Browser.sandbox { init = initialModel, update = update, view = view }
+    Browser.sandbox
+        { init = initialModel
+        , update = update
+        , view = view
+        }
 
 
 type Piece
@@ -27,17 +31,26 @@ type alias Hooks =
 
 
 type Hook
-    = Positive
-    | Negative
+    = Positive Float
+    | Negative Float
     | None
 
 
+initialModel : Model
 initialModel =
     { sizeX = 8
     , sizeY = 6
     , pieceSize = 100
     , pieces =
         generatePieces 8 6
+    }
+
+
+type alias Model =
+    { sizeX : Int
+    , sizeY : Int
+    , pieceSize : Int
+    , pieces : List Piece
     }
 
 
@@ -105,22 +118,38 @@ noHooks =
     }
 
 
+generateHooks : Seed -> ( Hooks, Seed )
 generateHooks seed0 =
     let
+        withDeviation ( hook, seed ) =
+            let
+                ( deviation, updatedSeed ) =
+                    Random.step (Random.float 0 0.1) seed
+            in
+                case hook of
+                    Positive _ ->
+                        ( Positive deviation, updatedSeed )
+
+                    Negative _ ->
+                        ( Negative deviation, updatedSeed )
+
+                    None ->
+                        ( None, updatedSeed )
+
         generator =
-            Random.uniform Positive [ Negative ]
+            Random.uniform (Positive 0) [ (Negative 0) ]
 
         ( north, seed1 ) =
-            Random.step generator seed0
+            Random.step generator seed0 |> withDeviation
 
         ( east, seed2 ) =
-            Random.step generator seed1
+            Random.step generator seed1 |> withDeviation
 
         ( south, seed3 ) =
-            Random.step generator seed2
+            Random.step generator seed2 |> withDeviation
 
         ( west, seed4 ) =
-            Random.step generator seed3
+            Random.step generator seed3 |> withDeviation
     in
         ( { north = north
           , east = east
@@ -181,11 +210,11 @@ negate hook =
         None ->
             None
 
-        Positive ->
-            Negative
+        Positive deviation ->
+            Negative deviation
 
-        Negative ->
-            Positive
+        Negative deviation ->
+            Positive deviation
 
 
 update msg model =
@@ -223,10 +252,10 @@ describeHook hook =
         None ->
             "*"
 
-        Positive ->
+        Positive _ ->
             "+"
 
-        Negative ->
+        Negative _ ->
             "-"
 
 
@@ -251,7 +280,7 @@ pieceView pieceSize (Piece position hooks) =
                 , y "20"
                 , fill "black"
                 ]
-                [ text (describePiece (Piece position hooks)) ]
+                [{- text (describePiece (Piece position hooks)) -}]
             ]
 
 
@@ -288,8 +317,18 @@ side hook =
         None ->
             [ ( 0, 0 ), ( 1, 0 ) ]
 
-        Positive ->
-            [ ( 0, 0 ), ( 0.3, 0 ), ( 0.5, -0.3 ), ( 0.7, 0 ), ( 1, 0 ) ]
+        Positive deviation ->
+            [ ( 0, 0 )
+            , ( 0.3 + deviation, 0 )
+            , ( 0.5 + deviation, -0.3 )
+            , ( 0.7 + deviation, 0 )
+            , ( 1, 0 )
+            ]
 
-        Negative ->
-            [ ( 0, 0 ), ( 0.3, 0 ), ( 0.5, 0.3 ), ( 0.7, 0 ), ( 1, 0 ) ]
+        Negative deviation ->
+            [ ( 0, 0 )
+            , ( 0.3 - deviation, 0 )
+            , ( 0.5 - deviation, 0.3 )
+            , ( 0.7 - deviation, 0 )
+            , ( 1, 0 )
+            ]
