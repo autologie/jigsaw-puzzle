@@ -16,12 +16,29 @@ main =
 
 initialModel : Model
 initialModel =
-    { sizeX = 8
-    , sizeY = 6
-    , pieceSize = 100
-    , pieces =
-        generatePieces 8 6
-    }
+    let
+        sizeX =
+            8
+
+        sizeY =
+            6
+
+        pieceSize =
+            100
+    in
+        { sizeX = sizeX
+        , sizeY = sizeY
+        , pieceSize = pieceSize
+        , pieces =
+            generatePieces sizeX sizeY
+                |> List.map
+                    (\piece ->
+                        { piece = piece
+                        , position = desiredPosition pieceSize piece
+                        }
+                    )
+        , dragging = Nothing
+        }
 
 
 generatePieces sizeX sizeY =
@@ -188,4 +205,80 @@ negate hook =
 
 
 update msg model =
-    model
+    case msg of
+        StartDragging targetPiece ->
+            { model
+                | dragging = Just targetPiece
+                , pieces =
+                    model.pieces
+                        |> List.sortBy
+                            (\piece ->
+                                if piece.piece == targetPiece then
+                                    1
+                                else
+                                    0
+                            )
+            }
+
+        EndDragging ->
+            case model.dragging of
+                Just targetPiece ->
+                    { model
+                        | dragging = Nothing
+                        , pieces =
+                            model.pieces
+                                |> List.map
+                                    (\piece ->
+                                        if
+                                            piece.piece
+                                                == targetPiece
+                                                && isCorrectDrop model.pieceSize piece
+                                        then
+                                            { piece
+                                                | piece = piece.piece
+                                                , position = desiredPosition model.pieceSize piece.piece
+                                            }
+                                        else
+                                            piece
+                                    )
+                    }
+
+                Nothing ->
+                    model
+
+        MouseMove ( x, y ) ->
+            { model
+                | pieces =
+                    case model.dragging of
+                        Just draggingPiece ->
+                            model.pieces
+                                |> List.map
+                                    (\piece ->
+                                        if piece.piece == draggingPiece then
+                                            { position = ( x, y )
+                                            , piece = piece.piece
+                                            }
+                                        else
+                                            piece
+                                    )
+
+                        Nothing ->
+                            model.pieces
+            }
+
+
+desiredPosition pieceSize (Piece { x, y } _) =
+    ( x * pieceSize, y * pieceSize )
+
+
+isCorrectDrop pieceSize { piece, position } =
+    let
+        ( desiredX, desiredY ) =
+            desiredPosition pieceSize piece
+
+        distance =
+            case position of
+                ( actualX, actualY ) ->
+                    sqrt (toFloat (desiredX - actualX) ^ 2 + toFloat (desiredY - actualY) ^ 2)
+    in
+        distance < 10

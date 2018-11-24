@@ -23,9 +23,22 @@ type Hook
     | None
 
 
+type alias PieceScattering =
+    { piece : Piece
+    , position : ( Int, Int )
+    }
+
+
 type alias Model =
     { sizeX : Int
     , sizeY : Int
     , pieceSize : Int
-    , pieces : List Piece
+    , pieces : List PieceScattering
+    , dragging : Maybe Piece
     }
+
+
+type Msg
+    = StartDragging Piece
+    | EndDragging
+    | MouseMove ( Int, Int )

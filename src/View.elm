@@ -1,12 +1,13 @@
 module View exposing (view)
 
+import Json.Decode as Decode exposing (Decoder)
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
 import Svg.Events exposing (..)
 import Model exposing (..)
 
 
-view { sizeX, sizeY, pieceSize, pieces } =
+view { sizeX, sizeY, pieceSize, pieces, dragging } =
     svg
         [ width (String.fromInt (sizeX * pieceSize))
         , height (String.fromInt (sizeY * pieceSize))
@@ -18,6 +19,15 @@ view { sizeX, sizeY, pieceSize, pieces } =
              ]
                 |> List.map String.fromInt
                 |> String.join " "
+            )
+        , Svg.Attributes.style "background: #eee"
+        , on "mousemove"
+            (Decode.map
+                MouseMove
+                (Decode.map2 (\x y -> ( x, y ))
+                    (Decode.at [ "offsetX" ] Decode.int)
+                    (Decode.at [ "offsetY" ] Decode.int)
+                )
             )
         ]
         (pieces |> List.map (pieceView pieceSize))
@@ -44,29 +54,26 @@ describeHook hook =
             "-"
 
 
-pieceView pieceSize (Piece position hooks) =
-    let
-        myX =
-            position.x * pieceSize
-
-        myY =
-            position.y * pieceSize
-    in
-        g
-            [ transform ("translate(" ++ (String.fromInt myX) ++ "," ++ (String.fromInt myY) ++ ")") ]
-            [ Svg.path
-                [ d (piecePath pieceSize (Piece position hooks))
-                , stroke "red"
-                , fill "white"
+pieceView pieceSize piece =
+    case piece.position of
+        ( myX, myY ) ->
+            g
+                [ transform ("translate(" ++ (String.fromInt myX) ++ "," ++ (String.fromInt myY) ++ ")") ]
+                [ Svg.path
+                    [ d (piecePath pieceSize piece.piece)
+                    , stroke "red"
+                    , fill "white"
+                    , onMouseDown (StartDragging piece.piece)
+                    , onMouseUp EndDragging
+                    ]
+                    []
+                , text_
+                    [ x "0"
+                    , y "20"
+                    , fill "black"
+                    ]
+                    [{- text (describePiece piece) -}]
                 ]
-                []
-            , text_
-                [ x "0"
-                , y "20"
-                , fill "black"
-                ]
-                [{- text (describePiece (Piece position hooks)) -}]
-            ]
 
 
 piecePath pieceSize (Piece position hooks) =
