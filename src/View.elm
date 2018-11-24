@@ -156,7 +156,7 @@ side hook isInitial =
                 , C ( (0.35 + deviation) / 2, 0 ) ( (0.35 + deviation) / 2, sink ) ( 0.35 + deviation, sink )
                 , C ( 0.5 + deviation, sink ) ( 0.2 + deviation, -height ) ( 0.5 + deviation, -height )
                 , C ( 0.8 + deviation, -height ) ( 0.5 + deviation, sink ) ( 0.65 + deviation, sink )
-                , C ( (1.65 + deviation) / 2, -sink ) ( (1.65 + deviation) / 2, 0 ) ( 1, 0 )
+                , C ( (1.65 + deviation) / 2, sink ) ( (1.65 + deviation) / 2, 0 ) ( 1, 0 )
                 ]
 
             Negative deviation ->
