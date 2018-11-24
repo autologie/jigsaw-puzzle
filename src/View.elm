@@ -68,7 +68,14 @@ pieceView pieceSize piece =
                     [ d (piecePath pieceSize piece.piece)
                     , stroke "red"
                     , fill "white"
-                    , onMouseDown (StartDragging piece.piece)
+                    , on "mousedown"
+                        (Decode.map
+                            (\position -> StartDragging piece.piece position)
+                            (Decode.map2 (\x y -> ( x - myX, y - myY ))
+                                (Decode.at [ "offsetX" ] Decode.int)
+                                (Decode.at [ "offsetY" ] Decode.int)
+                            )
+                        )
                     , onMouseUp EndDragging
                     ]
                     []

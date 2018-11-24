@@ -36,13 +36,13 @@ type alias Model =
     , sizeY : Int
     , pieceSize : Int
     , pieces : List PieceScattering
-    , dragging : Maybe Piece
+    , dragging : Maybe ( Piece, ( Int, Int ) )
     , seed : Random.Seed
     }
 
 
 type Msg
-    = StartDragging Piece
+    = StartDragging Piece ( Int, Int )
     | EndDragging
     | MouseMove ( Int, Int )
     | Scatter

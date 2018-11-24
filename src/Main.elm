@@ -212,9 +212,9 @@ negate hook =
 
 update msg model =
     case msg of
-        StartDragging targetPiece ->
+        StartDragging targetPiece touchPosition ->
             { model
-                | dragging = Just targetPiece
+                | dragging = Just ( targetPiece, touchPosition )
                 , pieces =
                     model.pieces
                         |> List.sortBy
@@ -228,7 +228,7 @@ update msg model =
 
         EndDragging ->
             case model.dragging of
-                Just targetPiece ->
+                Just ( targetPiece, _ ) ->
                     { model
                         | dragging = Nothing
                         , pieces =
@@ -256,12 +256,12 @@ update msg model =
             { model
                 | pieces =
                     case model.dragging of
-                        Just draggingPiece ->
+                        Just ( draggingPiece, ( touchX, touchY ) ) ->
                             model.pieces
                                 |> List.map
                                     (\piece ->
                                         if piece.piece == draggingPiece then
-                                            { position = ( x, y )
+                                            { position = ( x - touchX, y - touchY )
                                             , piece = piece.piece
                                             }
                                         else
