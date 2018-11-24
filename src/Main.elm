@@ -235,15 +235,33 @@ update msg model =
                             model.pieces
                                 |> List.map
                                     (\piece ->
-                                        if
-                                            piece.piece
-                                                == targetPiece
-                                                && isCorrectDrop model.pieceSize piece
-                                        then
-                                            { piece
-                                                | piece = piece.piece
-                                                , position = desiredPosition model.pieceSize piece.piece
-                                            }
+                                        if piece.piece == targetPiece then
+                                            if isCorrectDrop model.pieceSize piece then
+                                                { piece
+                                                    | piece = piece.piece
+                                                    , position = desiredPosition model.pieceSize piece.piece
+                                                }
+                                            else
+                                                case ( piece.position, piece.piece ) of
+                                                    ( ( pX, pY ), Piece { x, y } _ ) ->
+                                                        let
+                                                            nextX =
+                                                                if x == 0 && pX < 10 then
+                                                                    0
+                                                                else if x == model.sizeX - 1 && pX > (model.sizeX - 1) * model.pieceSize - 10 then
+                                                                    (model.sizeX - 1) * model.pieceSize
+                                                                else
+                                                                    pX
+
+                                                            nextY =
+                                                                if y == 0 && pY < 10 then
+                                                                    0
+                                                                else if y == model.sizeY - 1 && pY > (model.sizeY - 1) * model.pieceSize - 10 then
+                                                                    (model.sizeY - 1) * model.pieceSize
+                                                                else
+                                                                    pY
+                                                        in
+                                                            { piece | position = ( nextX, nextY ) }
                                         else
                                             piece
                                     )
