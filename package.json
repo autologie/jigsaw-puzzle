@@ -4,7 +4,7 @@
   "description": "",
   "private": true,
   "scripts": {
-    "build": "elm make src/Main.elm --output=dist/index.html"
+    "build": "rm -r ./dist/* && cp -r ./public/* ./dist && ./build.sh"
   },
   "repository": {
     "type": "git",
@@ -13,5 +13,8 @@
   "homepage": "https://bitbucket.org/sgrinoue/puzzle#readme",
   "devDependencies": {
     "elm": "^0.19.0-bugfix2"
+  },
+  "dependencies": {
+    "uglify-js": "^3.4.9"
   }
 }
