@@ -1,6 +1,7 @@
 module View exposing (view)
 
 import Json.Decode as Decode exposing (Decoder)
+import Html
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
 import Svg.Events exposing (..)
@@ -8,29 +9,33 @@ import Model exposing (..)
 
 
 view { sizeX, sizeY, pieceSize, pieces, dragging } =
-    svg
-        [ width (String.fromInt (sizeX * pieceSize))
-        , height (String.fromInt (sizeY * pieceSize))
-        , viewBox
-            ([ 0
-             , 0
-             , sizeX * pieceSize
-             , sizeY * pieceSize
-             ]
-                |> List.map String.fromInt
-                |> String.join " "
-            )
-        , Svg.Attributes.style "background: #eee"
-        , on "mousemove"
-            (Decode.map
-                MouseMove
-                (Decode.map2 (\x y -> ( x, y ))
-                    (Decode.at [ "offsetX" ] Decode.int)
-                    (Decode.at [ "offsetY" ] Decode.int)
+    Html.div []
+        [ svg
+            [ width (String.fromInt (sizeX * pieceSize))
+            , height (String.fromInt (sizeY * pieceSize))
+            , viewBox
+                ([ 0
+                 , 0
+                 , sizeX * pieceSize
+                 , sizeY * pieceSize
+                 ]
+                    |> List.map String.fromInt
+                    |> String.join " "
                 )
-            )
+            , Svg.Attributes.style "background: #eee; display: block;"
+            , on "mousemove"
+                (Decode.map
+                    MouseMove
+                    (Decode.map2 (\x y -> ( x, y ))
+                        (Decode.at [ "offsetX" ] Decode.int)
+                        (Decode.at [ "offsetY" ] Decode.int)
+                    )
+                )
+            ]
+            (pieces |> List.map (pieceView pieceSize))
+        , Html.button [ onClick Scatter ] [ Html.text "Scatter" ]
+        , Html.button [ onClick Reset ] [ Html.text "New Puzzle" ]
         ]
-        (pieces |> List.map (pieceView pieceSize))
 
 
 describePiece (Piece { x, y } { north, east, south, west }) =

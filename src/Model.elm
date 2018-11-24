@@ -1,5 +1,7 @@
 module Model exposing (..)
 
+import Random
+
 
 type Piece
     = Piece Position Hooks
@@ -35,6 +37,7 @@ type alias Model =
     , pieceSize : Int
     , pieces : List PieceScattering
     , dragging : Maybe Piece
+    , seed : Random.Seed
     }
 
 
@@ -42,3 +45,5 @@ type Msg
     = StartDragging Piece
     | EndDragging
     | MouseMove ( Int, Int )
+    | Scatter
+    | Reset

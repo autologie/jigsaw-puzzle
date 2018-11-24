@@ -25,23 +25,20 @@ initialModel =
 
         pieceSize =
             50
+
+        ( pieces, seed ) =
+            generatePieces sizeX sizeY pieceSize (Random.initialSeed 0)
     in
         { sizeX = sizeX
         , sizeY = sizeY
         , pieceSize = pieceSize
-        , pieces =
-            generatePieces sizeX sizeY
-                |> List.map
-                    (\piece ->
-                        { piece = piece
-                        , position = desiredPosition pieceSize piece
-                        }
-                    )
+        , pieces = pieces
         , dragging = Nothing
+        , seed = seed
         }
 
 
-generatePieces sizeX sizeY =
+generatePieces sizeX sizeY pieceSize seed =
     let
         plain =
             plainPieces sizeX sizeY
@@ -62,13 +59,13 @@ generatePieces sizeX sizeY =
             else
                 hooks
 
-        ( generatedPieces, _ ) =
+        ( generatedPieces, lastSeed ) =
             plain
                 |> List.foldl
-                    (\(Piece position hooks) ( pieces, seed ) ->
+                    (\(Piece position hooks) ( pieces, mySeed ) ->
                         let
                             ( generatedHooks, updatedSeed ) =
-                                generateHooks seed
+                                generateHooks mySeed
                         in
                             ( withHooksAssigned position
                                 (generatedHooks
@@ -79,9 +76,17 @@ generatePieces sizeX sizeY =
                             , updatedSeed
                             )
                     )
-                    ( plain, Random.initialSeed 0 )
+                    ( plain, seed )
     in
-        generatedPieces
+        ( generatedPieces
+            |> List.map
+                (\piece ->
+                    { piece = piece
+                    , position = desiredPosition pieceSize piece
+                    }
+                )
+        , lastSeed
+        )
 
 
 plainPieces sizeX sizeY =
@@ -109,12 +114,12 @@ generateHooks : Seed -> ( Hooks, Seed )
 generateHooks seed0 =
     let
         maxDiviation =
-            0.12
+            0.06
 
         withDeviation ( hook, seed ) =
             let
                 ( deviation, updatedSeed ) =
-                    Random.step (Random.float 0 maxDiviation) seed
+                    Random.step (Random.float -maxDiviation maxDiviation) seed
             in
                 case hook of
                     Positive _ ->
@@ -266,6 +271,48 @@ update msg model =
                         Nothing ->
                             model.pieces
             }
+
+        Reset ->
+            let
+                ( pieces, seed ) =
+                    generatePieces
+                        model.sizeX
+                        model.sizeY
+                        model.pieceSize
+                        model.seed
+            in
+                { model
+                    | dragging = Nothing
+                    , pieces = pieces
+                    , seed = seed
+                }
+
+        Scatter ->
+            let
+                ( pieces, seed ) =
+                    model.pieces
+                        |> List.foldl
+                            (\piece ( passed, seed0 ) ->
+                                let
+                                    ( x, seed1 ) =
+                                        Random.step (Random.int 0 ((model.sizeX - 1) * model.pieceSize)) seed0
+
+                                    ( y, seed2 ) =
+                                        Random.step (Random.int 0 ((model.sizeY - 1) * model.pieceSize)) seed1
+                                in
+                                    ( List.concat
+                                        [ passed
+                                        , [ { piece | position = ( x, y ) } ]
+                                        ]
+                                    , seed2
+                                    )
+                            )
+                            ( [], model.seed )
+            in
+                { model
+                    | pieces = pieces
+                    , seed = seed
+                }
 
 
 desiredPosition pieceSize (Piece { x, y } _) =
