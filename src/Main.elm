@@ -108,10 +108,13 @@ noHooks =
 generateHooks : Seed -> ( Hooks, Seed )
 generateHooks seed0 =
     let
+        maxDiviation =
+            0.12
+
         withDeviation ( hook, seed ) =
             let
                 ( deviation, updatedSeed ) =
-                    Random.step (Random.float 0 0.1) seed
+                    Random.step (Random.float 0 maxDiviation) seed
             in
                 case hook of
                     Positive _ ->
