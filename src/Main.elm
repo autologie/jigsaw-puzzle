@@ -18,13 +18,13 @@ initialModel : Model
 initialModel =
     let
         sizeX =
-            8
+            15
 
         sizeY =
-            6
+            10
 
         pieceSize =
-            100
+            50
     in
         { sizeX = sizeX
         , sizeY = sizeY
@@ -169,26 +169,24 @@ withHooksAssigned { x, y } { north, east, south, west } pieces =
     in
         pieces
             |> List.map
-                (\piece ->
-                    case piece of
-                        Piece position hooks ->
-                            if isJust position then
-                                Piece position
-                                    { north = north
-                                    , east = east
-                                    , south = south
-                                    , west = west
-                                    }
-                            else if isWestOf position then
-                                Piece position { hooks | west = negate east }
-                            else if isEastOf position then
-                                Piece position { hooks | east = negate west }
-                            else if isNorthOf position then
-                                Piece position { hooks | north = negate south }
-                            else if isSouthOf position then
-                                Piece position { hooks | south = negate north }
-                            else
-                                piece
+                (\(Piece position hooks) ->
+                    if isJust position then
+                        Piece position
+                            { north = north
+                            , east = east
+                            , south = south
+                            , west = west
+                            }
+                    else if isWestOf position then
+                        Piece position { hooks | west = negate east }
+                    else if isEastOf position then
+                        Piece position { hooks | east = negate west }
+                    else if isNorthOf position then
+                        Piece position { hooks | north = negate south }
+                    else if isSouthOf position then
+                        Piece position { hooks | south = negate north }
+                    else
+                        Piece position hooks
                 )
 
 
@@ -198,10 +196,10 @@ negate hook =
             None
 
         Positive deviation ->
-            Negative deviation
+            Negative -deviation
 
         Negative deviation ->
-            Positive deviation
+            Positive -deviation
 
 
 update msg model =

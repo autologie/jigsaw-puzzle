@@ -76,47 +76,85 @@ pieceView pieceSize piece =
                 ]
 
 
+type PathElement
+    = M Point
+    | C Point Point Point
+    | L Point
+
+
+type alias Point =
+    ( Float, Float )
+
+
 piecePath pieceSize (Piece position hooks) =
+    List.concat
+        [ side hooks.north True
+        , side hooks.east False |> List.map (translate (\( x, y ) -> ( 1 - y, x )))
+        , side hooks.south False |> List.map (translate (\( x, y ) -> ( 1 - x, 1 - y )))
+        , side hooks.west False |> List.map (translate (\( x, y ) -> ( y, 1 - x )))
+        ]
+        |> List.map (translate (\( x, y ) -> ( x * (toFloat pieceSize), y * (toFloat pieceSize) )))
+        |> List.map
+            (\pathElement ->
+                case pathElement of
+                    M ( x, y ) ->
+                        "M " ++ ([ x, y ] |> List.map String.fromFloat |> String.join " ")
+
+                    L ( x, y ) ->
+                        "L " ++ ([ x, y ] |> List.map String.fromFloat |> String.join " ")
+
+                    C ( x1, y1 ) ( x2, y2 ) ( x, y ) ->
+                        "C "
+                            ++ ([ [ x1, y1 ], [ x2, y2 ], [ x, y ] ]
+                                    |> List.map (List.map String.fromFloat >> String.join ",")
+                                    |> String.join " "
+                               )
+            )
+        |> String.join " "
+        |> (\path -> path ++ " z")
+
+
+translate : (Point -> Point) -> PathElement -> PathElement
+translate fn pathElement =
+    case pathElement of
+        M p ->
+            M (fn p)
+
+        C p1 p2 p ->
+            C (fn p1) (fn p2) (fn p)
+
+        L p ->
+            L (fn p)
+
+
+side : Hook -> Bool -> List PathElement
+side hook isInitial =
     let
-        coords =
-            List.concat
-                [ side hooks.north
-                , side hooks.east |> List.map ((\( x, y ) -> ( -y, x )) >> translate 1 0)
-                , side hooks.south |> List.map ((\( x, y ) -> ( -x, -y )) >> translate 1 1)
-                , side hooks.west |> List.map ((\( x, y ) -> ( y, -x )) >> translate 0 1)
-                ]
-                |> List.map (\( x, y ) -> ( x * (toFloat pieceSize), y * (toFloat pieceSize) ))
-                |> List.map (\( x, y ) -> (String.fromFloat x) ++ " " ++ (String.fromFloat y))
+        initial =
+            if isInitial then
+                M ( 0, 0 )
+            else
+                L ( 0, 0 )
+
+        height =
+            0.3
     in
-        case coords of
-            head :: tail ->
-                "M " ++ head ++ (tail |> List.map (\v -> "L " ++ v) |> String.join " ") ++ " z"
+        case hook of
+            None ->
+                [ initial, L ( 1, 0 ) ]
 
-            _ ->
-                ""
+            Positive deviation ->
+                [ initial
+                , L ( 0.3 + deviation, 0 )
+                , C ( 0.5 + deviation, 0 ) ( 0.2 + deviation, -height ) ( 0.5 + deviation, -height )
+                , C ( 0.8 + deviation, -height ) ( 0.5 + deviation, 0 ) ( 0.7 + deviation, 0 )
+                , L ( 1, 0 )
+                ]
 
-
-translate diffX diffY ( x, y ) =
-    ( x + diffX, y + diffY )
-
-
-side hook =
-    case hook of
-        None ->
-            [ ( 0, 0 ), ( 1, 0 ) ]
-
-        Positive deviation ->
-            [ ( 0, 0 )
-            , ( 0.3 + deviation, 0 )
-            , ( 0.5 + deviation, -0.3 )
-            , ( 0.7 + deviation, 0 )
-            , ( 1, 0 )
-            ]
-
-        Negative deviation ->
-            [ ( 0, 0 )
-            , ( 0.3 - deviation, 0 )
-            , ( 0.5 - deviation, 0.3 )
-            , ( 0.7 - deviation, 0 )
-            , ( 1, 0 )
-            ]
+            Negative deviation ->
+                [ initial
+                , L ( 0.3 + deviation, 0 )
+                , C ( 0.5 + deviation, 0 ) ( 0.2 + deviation, height ) ( 0.5 + deviation, height )
+                , C ( 0.8 + deviation, height ) ( 0.5 + deviation, 0 ) ( 0.7 + deviation, 0 )
+                , L ( 1, 0 )
+                ]
