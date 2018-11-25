@@ -1,6 +1,7 @@
 module Model exposing (..)
 
 import Random
+import Dict exposing (Dict)
 
 
 type Piece
@@ -30,8 +31,7 @@ type alias PieceGroupId =
 
 
 type alias PieceGroup =
-    { id : PieceGroupId
-    , pieces : List Piece
+    { pieces : List Piece
     , position : ( Int, Int )
     , isSettled : Bool
     }
@@ -41,14 +41,14 @@ type alias Model =
     { sizeX : Int
     , sizeY : Int
     , pieceSize : Int
-    , groups : List PieceGroup
+    , groups : Dict PieceGroupId PieceGroup
     , dragging : Maybe ( PieceGroupId, ( Int, Int ) )
     , seed : Random.Seed
     }
 
 
 type Msg
-    = StartDragging PieceGroup ( Int, Int )
+    = StartDragging PieceGroupId ( Int, Int )
     | EndDragging
     | MouseMove ( Int, Int )
     | Scatter

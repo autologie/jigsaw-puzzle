@@ -3,6 +3,7 @@ module View exposing (view)
 import Json.Decode as Decode exposing (Decoder)
 import Html exposing (Html)
 import Svg exposing (..)
+import Dict
 import Svg.Attributes exposing (..)
 import Svg.Events exposing (..)
 import Model exposing (..)
@@ -33,23 +34,32 @@ view { sizeX, sizeY, pieceSize, groups, dragging } =
                     )
                 )
             ]
-            (groups |> List.concatMap (groupViews pieceSize))
+            (groups
+                |> Dict.toList
+                |> List.sortBy
+                    (groupZIndex
+                        (dragging
+                            |> Maybe.map (\( id, _ ) -> id)
+                        )
+                    )
+                |> List.concatMap (groupViews pieceSize)
+            )
         , Html.button [ onClick Scatter ] [ Html.text "Scatter" ]
         , Html.button [ onClick Reset ] [ Html.text "New Puzzle" ]
         ]
 
 
-groupViews : Int -> PieceGroup -> List (Svg Msg)
-groupViews pieceSize group =
+groupViews : Int -> ( PieceGroupId, PieceGroup ) -> List (Svg Msg)
+groupViews pieceSize ( groupId, group ) =
     let
         ( x, y ) =
             group.position
     in
-        group.pieces |> List.map (pieceView x y pieceSize group)
+        group.pieces |> List.map (pieceView x y pieceSize groupId)
 
 
-pieceView : Int -> Int -> Int -> PieceGroup -> Piece -> Svg Msg
-pieceView groupX groupY pieceSize group piece =
+pieceView : Int -> Int -> Int -> PieceGroupId -> Piece -> Svg Msg
+pieceView groupX groupY pieceSize groupId piece =
     g
         [ transform ("translate(" ++ (String.fromInt groupX) ++ "," ++ (String.fromInt groupY) ++ ")") ]
         [ Svg.path
@@ -58,7 +68,7 @@ pieceView groupX groupY pieceSize group piece =
             , fill "white"
             , on "mousedown"
                 (Decode.map
-                    (\position -> StartDragging group position)
+                    (\position -> StartDragging groupId position)
                     (Decode.map2 (\x y -> ( x - groupX, y - groupY ))
                         (Decode.at [ "offsetX" ] Decode.int)
                         (Decode.at [ "offsetY" ] Decode.int)
@@ -171,3 +181,17 @@ translate fn pathElement =
 
         L p ->
             L (fn p)
+
+
+groupZIndex : Maybe PieceGroupId -> ( PieceGroupId, PieceGroup ) -> Int
+groupZIndex draggingGroupId ( groupId, group ) =
+    if group.isSettled then
+        -1
+    else if
+        draggingGroupId
+            |> Maybe.map (\id -> id == groupId)
+            |> Maybe.withDefault False
+    then
+        1
+    else
+        0

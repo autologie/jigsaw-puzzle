@@ -1,6 +1,7 @@
 module Main exposing (..)
 
 import Browser
+import Dict exposing (Dict)
 import Random exposing (Seed)
 import Model exposing (..)
 import View exposing (view)
@@ -79,12 +80,14 @@ generateGroups sizeX sizeY pieceSize seed =
         ( generatedPieces
             |> List.indexedMap
                 (\index piece ->
-                    { id = index
-                    , pieces = [ piece ]
-                    , position = defaultPosition pieceSize [ piece ]
-                    , isSettled = True
-                    }
+                    ( index
+                    , { pieces = [ piece ]
+                      , position = defaultPosition pieceSize [ piece ]
+                      , isSettled = True
+                      }
+                    )
                 )
+            |> Dict.fromList
         , lastSeed
         )
 
@@ -215,13 +218,12 @@ negate hook =
 update : Msg -> Model -> Model
 update msg model =
     case ( model.dragging, msg ) of
-        ( Nothing, StartDragging targetGroup touchPosition ) ->
+        ( Nothing, StartDragging targetGroupId touchPosition ) ->
             { model
-                | dragging = Just ( targetGroup.id, touchPosition )
+                | dragging = Just ( targetGroupId, touchPosition )
                 , groups =
                     model.groups
-                        |> List.map (\group -> { group | isSettled = False })
-                        |> List.sortBy (sortOrderOfGroup targetGroup.id)
+                        |> Dict.map (\_ group -> { group | isSettled = False })
             }
 
         ( Just ( targetGroupId, _ ), EndDragging ) ->
@@ -230,18 +232,17 @@ update msg model =
                 , groups =
                     model.groups
                         |> updateGroupsOnDrop model targetGroupId
-                        |> List.sortBy (sortOrderOfGroup targetGroupId)
             }
 
         ( Just ( draggingGroupId, ( touchX, touchY ) ), MouseMove ( x, y ) ) ->
             let
-                updatePosition group =
-                    if group.id == draggingGroupId then
+                updatePosition groupId group =
+                    if groupId == draggingGroupId then
                         { group | position = ( x - touchX, y - touchY ) }
                     else
                         group
             in
-                { model | groups = model.groups |> List.map updatePosition }
+                { model | groups = model.groups |> Dict.map updatePosition }
 
         ( _, Reset ) ->
             let
@@ -260,7 +261,7 @@ update msg model =
 
         ( _, Scatter ) ->
             let
-                reduceGroups group ( passed, seed0 ) =
+                reduceGroups groupId group ( passed, seed0 ) =
                     let
                         ( x, seed1 ) =
                             Random.step (Random.int 0 ((model.sizeX - 1) * model.pieceSize)) seed0
@@ -268,15 +269,16 @@ update msg model =
                         ( y, seed2 ) =
                             Random.step (Random.int 0 ((model.sizeY - 1) * model.pieceSize)) seed1
                     in
-                        ( List.concat
-                            [ passed
-                            , [ { group | position = ( x, y ), isSettled = False } ]
-                            ]
+                        ( Dict.insert
+                            groupId
+                            { group | position = ( x, y ), isSettled = False }
+                            passed
                         , seed2
                         )
 
                 ( groups, seed ) =
-                    model.groups |> List.foldl reduceGroups ( [], model.seed )
+                    model.groups
+                        |> Dict.foldl reduceGroups ( Dict.empty, model.seed )
             in
                 { model
                     | groups = groups
@@ -285,16 +287,6 @@ update msg model =
 
         _ ->
             model
-
-
-sortOrderOfGroup : PieceGroupId -> PieceGroup -> Int
-sortOrderOfGroup targetGroupId group =
-    if group.isSettled then
-        -1
-    else if group.id == targetGroupId then
-        1
-    else
-        0
 
 
 defaultPosition : Int -> List Piece -> ( Int, Int )
@@ -322,9 +314,50 @@ isCorrectDrop { pieceSize } group =
         distance < 10
 
 
-updateGroupsOnDrop : Model -> PieceGroupId -> List PieceGroup -> List PieceGroup
+updateGroupsOnDrop : Model -> PieceGroupId -> Dict PieceGroupId PieceGroup -> Dict PieceGroupId PieceGroup
 updateGroupsOnDrop model targetGroupId groups =
-    groups
+    let
+        ( mergeableGroups, restGroups ) =
+            groups |> Dict.partition (\groupId group -> groupId == targetGroupId || isMergeable group group)
+
+        mergeableGroupList =
+            mergeableGroups
+                |> Dict.toList
+
+        mergedGroupId =
+            mergeableGroupList
+                |> List.map (\( id, _ ) -> id)
+                |> List.minimum
+                |> Maybe.withDefault targetGroupId
+
+        mergedGroup =
+            { pieces =
+                mergeableGroupList
+                    |> List.concatMap (\( _, group ) -> group.pieces)
+            , isSettled = mergeableGroups |> Dict.toList |> List.any (\( _, { isSettled } ) -> isSettled)
+            , position =
+                ( mergeableGroupList
+                    |> List.map (\( _, { position } ) -> Tuple.first position)
+                    |> List.minimum
+                    |> Maybe.withDefault 0
+                , mergeableGroupList
+                    |> List.map (\( _, { position } ) -> Tuple.second position)
+                    |> List.minimum
+                    |> Maybe.withDefault 0
+                )
+            }
+    in
+        Dict.insert mergedGroupId mergedGroup restGroups
+
+
+isMergeable : PieceGroup -> PieceGroup -> Bool
+isMergeable group anotherGroup =
+    False
+
+
+
+{-
+   groups
         |> List.foldl
             (\group passed ->
                 if group.id /= targetGroupId then
@@ -363,3 +396,4 @@ updateGroupsOnDrop model targetGroupId groups =
                             ]
             )
             []
+-}
