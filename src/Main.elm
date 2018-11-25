@@ -82,7 +82,7 @@ generatePieces sizeX sizeY pieceSize seed =
             |> List.map
                 (\piece ->
                     { piece = piece
-                    , position = desiredPosition pieceSize piece
+                    , position = defaultPosition pieceSize piece
                     }
                 )
         , lastSeed
@@ -113,13 +113,13 @@ noHooks =
 generateHooks : Seed -> ( Hooks, Seed )
 generateHooks seed0 =
     let
-        maxDiviation =
+        maxDeviation =
             0.06
 
         withDeviation ( hook, seed ) =
             let
                 ( deviation, updatedSeed ) =
-                    Random.step (Random.float -maxDiviation maxDiviation) seed
+                    Random.step (Random.float -maxDeviation maxDeviation) seed
             in
                 case hook of
                     Positive _ ->
@@ -155,47 +155,44 @@ generateHooks seed0 =
         )
 
 
+withHooksAssigned : Position -> Hooks -> List Piece -> List Piece
 withHooksAssigned { x, y } { north, east, south, west } pieces =
     let
-        isRelativeTo position offsetX offsetY =
-            x == position.x + offsetX && y == position.y + offsetY
+        distanceTo position =
+            ( x - position.x |> String.fromInt
+            , y - position.y |> String.fromInt
+            )
 
-        isJust position =
-            isRelativeTo position 0 0
+        assignHooks =
+            \(Piece position hooks) ->
+                let
+                    updatedHooks =
+                        case distanceTo position of
+                            ( "0", "0" ) ->
+                                { north = north
+                                , east = east
+                                , south = south
+                                , west = west
+                                }
 
-        isWestOf position =
-            isRelativeTo position -1 0
+                            ( "-1", "0" ) ->
+                                { hooks | west = negate east }
 
-        isEastOf position =
-            isRelativeTo position 1 0
+                            ( "1", "0" ) ->
+                                { hooks | east = negate west }
 
-        isSouthOf position =
-            isRelativeTo position 0 1
+                            ( "0", "-1" ) ->
+                                { hooks | north = negate south }
 
-        isNorthOf position =
-            isRelativeTo position 0 -1
+                            ( "0", "1" ) ->
+                                { hooks | south = negate north }
+
+                            _ ->
+                                hooks
+                in
+                    Piece position updatedHooks
     in
-        pieces
-            |> List.map
-                (\(Piece position hooks) ->
-                    if isJust position then
-                        Piece position
-                            { north = north
-                            , east = east
-                            , south = south
-                            , west = west
-                            }
-                    else if isWestOf position then
-                        Piece position { hooks | west = negate east }
-                    else if isEastOf position then
-                        Piece position { hooks | east = negate west }
-                    else if isNorthOf position then
-                        Piece position { hooks | north = negate south }
-                    else if isSouthOf position then
-                        Piece position { hooks | south = negate north }
-                    else
-                        Piece position hooks
-                )
+        pieces |> List.map assignHooks
 
 
 negate hook =
@@ -211,86 +208,37 @@ negate hook =
 
 
 update msg model =
-    case msg of
-        StartDragging targetPiece touchPosition ->
+    case ( model.dragging, msg ) of
+        ( Nothing, StartDragging targetPiece touchPosition ) ->
+            let
+                bringTargetToTop piece =
+                    if piece.piece == targetPiece then
+                        1
+                    else
+                        0
+            in
+                { model
+                    | dragging = Just ( targetPiece, touchPosition )
+                    , pieces = model.pieces |> List.sortBy bringTargetToTop
+                }
+
+        ( Just ( targetPiece, _ ), EndDragging ) ->
             { model
-                | dragging = Just ( targetPiece, touchPosition )
-                , pieces =
-                    model.pieces
-                        |> List.sortBy
-                            (\piece ->
-                                if piece.piece == targetPiece then
-                                    1
-                                else
-                                    0
-                            )
+                | dragging = Nothing
+                , pieces = model.pieces |> List.map (updatePieceOnDrop model targetPiece)
             }
 
-        EndDragging ->
-            case model.dragging of
-                Just ( targetPiece, _ ) ->
-                    { model
-                        | dragging = Nothing
-                        , pieces =
-                            model.pieces
-                                |> List.map
-                                    (\piece ->
-                                        if piece.piece == targetPiece then
-                                            if isCorrectDrop model.pieceSize piece then
-                                                { piece
-                                                    | piece = piece.piece
-                                                    , position = desiredPosition model.pieceSize piece.piece
-                                                }
-                                            else
-                                                case ( piece.position, piece.piece ) of
-                                                    ( ( pX, pY ), Piece { x, y } _ ) ->
-                                                        let
-                                                            nextX =
-                                                                if x == 0 && pX < 10 then
-                                                                    0
-                                                                else if x == model.sizeX - 1 && pX > (model.sizeX - 1) * model.pieceSize - 10 then
-                                                                    (model.sizeX - 1) * model.pieceSize
-                                                                else
-                                                                    pX
+        ( Just ( draggingPiece, ( touchX, touchY ) ), MouseMove ( x, y ) ) ->
+            let
+                updatePosition piece =
+                    if piece.piece == draggingPiece then
+                        { piece | position = ( x - touchX, y - touchY ) }
+                    else
+                        piece
+            in
+                { model | pieces = model.pieces |> List.map updatePosition }
 
-                                                            nextY =
-                                                                if y == 0 && pY < 10 then
-                                                                    0
-                                                                else if y == model.sizeY - 1 && pY > (model.sizeY - 1) * model.pieceSize - 10 then
-                                                                    (model.sizeY - 1) * model.pieceSize
-                                                                else
-                                                                    pY
-                                                        in
-                                                            { piece | position = ( nextX, nextY ) }
-                                        else
-                                            piece
-                                    )
-                    }
-
-                Nothing ->
-                    model
-
-        MouseMove ( x, y ) ->
-            { model
-                | pieces =
-                    case model.dragging of
-                        Just ( draggingPiece, ( touchX, touchY ) ) ->
-                            model.pieces
-                                |> List.map
-                                    (\piece ->
-                                        if piece.piece == draggingPiece then
-                                            { position = ( x - touchX, y - touchY )
-                                            , piece = piece.piece
-                                            }
-                                        else
-                                            piece
-                                    )
-
-                        Nothing ->
-                            model.pieces
-            }
-
-        Reset ->
+        ( _, Reset ) ->
             let
                 ( pieces, seed ) =
                     generatePieces
@@ -305,46 +253,74 @@ update msg model =
                     , seed = seed
                 }
 
-        Scatter ->
+        ( _, Scatter ) ->
             let
-                ( pieces, seed ) =
-                    model.pieces
-                        |> List.foldl
-                            (\piece ( passed, seed0 ) ->
-                                let
-                                    ( x, seed1 ) =
-                                        Random.step (Random.int 0 ((model.sizeX - 1) * model.pieceSize)) seed0
+                reducePieces piece ( passed, seed0 ) =
+                    let
+                        ( x, seed1 ) =
+                            Random.step (Random.int 0 ((model.sizeX - 1) * model.pieceSize)) seed0
 
-                                    ( y, seed2 ) =
-                                        Random.step (Random.int 0 ((model.sizeY - 1) * model.pieceSize)) seed1
-                                in
-                                    ( List.concat
-                                        [ passed
-                                        , [ { piece | position = ( x, y ) } ]
-                                        ]
-                                    , seed2
-                                    )
-                            )
-                            ( [], model.seed )
+                        ( y, seed2 ) =
+                            Random.step (Random.int 0 ((model.sizeY - 1) * model.pieceSize)) seed1
+                    in
+                        ( List.concat
+                            [ passed
+                            , [ { piece | position = ( x, y ) } ]
+                            ]
+                        , seed2
+                        )
+
+                ( pieces, seed ) =
+                    model.pieces |> List.foldl reducePieces ( [], model.seed )
             in
                 { model
                     | pieces = pieces
                     , seed = seed
                 }
 
+        _ ->
+            model
 
-desiredPosition pieceSize (Piece { x, y } _) =
+
+defaultPosition pieceSize (Piece { x, y } _) =
     ( x * pieceSize, y * pieceSize )
 
 
 isCorrectDrop pieceSize { piece, position } =
     let
-        ( desiredX, desiredY ) =
-            desiredPosition pieceSize piece
+        ( defaultX, defaultY ) =
+            defaultPosition pieceSize piece
 
         distance =
             case position of
                 ( actualX, actualY ) ->
-                    sqrt (toFloat (desiredX - actualX) ^ 2 + toFloat (desiredY - actualY) ^ 2)
+                    sqrt (toFloat (defaultX - actualX) ^ 2 + toFloat (defaultY - actualY) ^ 2)
     in
         distance < 10
+
+
+updatePieceOnDrop model targetPiece piece =
+    if piece.piece /= targetPiece then
+        piece
+    else if isCorrectDrop model.pieceSize piece then
+        { piece
+            | position = defaultPosition model.pieceSize piece.piece
+        }
+    else
+        case ( piece.position, piece.piece ) of
+            ( ( pX, pY ), Piece { x, y } _ ) ->
+                let
+                    withSnapApplied ( min, max ) position =
+                        if position < min + 10 then
+                            min
+                        else if position > max - 10 then
+                            max
+                        else
+                            position
+                in
+                    { piece
+                        | position =
+                            ( withSnapApplied ( 0, (model.sizeX - 1) * model.pieceSize ) pX
+                            , withSnapApplied ( 0, (model.sizeY - 1) * model.pieceSize ) pY
+                            )
+                    }

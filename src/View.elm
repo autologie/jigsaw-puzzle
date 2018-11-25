@@ -38,54 +38,35 @@ view { sizeX, sizeY, pieceSize, pieces, dragging } =
         ]
 
 
-describePiece (Piece { x, y } { north, east, south, west }) =
-    "("
-        ++ (String.fromInt x)
-        ++ ", "
-        ++ (String.fromInt y)
-        ++ ")\n"
-        ++ ([ north, east, south, west ] |> List.map describeHook |> String.join ", ")
-
-
-describeHook hook =
-    case hook of
-        None ->
-            "*"
-
-        Positive _ ->
-            "+"
-
-        Negative _ ->
-            "-"
-
-
 pieceView pieceSize piece =
-    case piece.position of
-        ( myX, myY ) ->
-            g
-                [ transform ("translate(" ++ (String.fromInt myX) ++ "," ++ (String.fromInt myY) ++ ")") ]
-                [ Svg.path
-                    [ d (piecePath pieceSize piece.piece)
-                    , stroke "red"
-                    , fill "white"
-                    , on "mousedown"
-                        (Decode.map
-                            (\position -> StartDragging piece.piece position)
-                            (Decode.map2 (\x y -> ( x - myX, y - myY ))
-                                (Decode.at [ "offsetX" ] Decode.int)
-                                (Decode.at [ "offsetY" ] Decode.int)
-                            )
+    let
+        ( myX, myY ) =
+            piece.position
+    in
+        g
+            [ transform ("translate(" ++ (String.fromInt myX) ++ "," ++ (String.fromInt myY) ++ ")") ]
+            [ Svg.path
+                [ d (piecePath pieceSize piece.piece)
+                , stroke "red"
+                , fill "white"
+                , on "mousedown"
+                    (Decode.map
+                        (\position -> StartDragging piece.piece position)
+                        (Decode.map2 (\x y -> ( x - myX, y - myY ))
+                            (Decode.at [ "offsetX" ] Decode.int)
+                            (Decode.at [ "offsetY" ] Decode.int)
                         )
-                    , onMouseUp EndDragging
-                    ]
-                    []
-                , text_
-                    [ x "0"
-                    , y "20"
-                    , fill "black"
-                    ]
-                    [{- text (describePiece piece) -}]
+                    )
+                , onMouseUp EndDragging
                 ]
+                []
+            , text_
+                [ x "0"
+                , y "20"
+                , fill "black"
+                ]
+                []
+            ]
 
 
 type PathElement
@@ -98,12 +79,13 @@ type alias Point =
     ( Float, Float )
 
 
+piecePath : Int -> Piece -> String
 piecePath pieceSize (Piece position hooks) =
     List.concat
-        [ side hooks.north True
-        , side hooks.east False |> List.map (translate (\( x, y ) -> ( 1 - y, x )))
-        , side hooks.south False |> List.map (translate (\( x, y ) -> ( 1 - x, 1 - y )))
-        , side hooks.west False |> List.map (translate (\( x, y ) -> ( y, 1 - x )))
+        [ sidePath hooks.north True
+        , sidePath hooks.east False |> List.map (translate (\( x, y ) -> ( 1 - y, x )))
+        , sidePath hooks.south False |> List.map (translate (\( x, y ) -> ( 1 - x, 1 - y )))
+        , sidePath hooks.west False |> List.map (translate (\( x, y ) -> ( y, 1 - x )))
         ]
         |> List.map (translate (\( x, y ) -> ( x * (toFloat pieceSize), y * (toFloat pieceSize) )))
         |> List.map
@@ -126,21 +108,8 @@ piecePath pieceSize (Piece position hooks) =
         |> (\path -> path ++ " z")
 
 
-translate : (Point -> Point) -> PathElement -> PathElement
-translate fn pathElement =
-    case pathElement of
-        M p ->
-            M (fn p)
-
-        C p1 p2 p ->
-            C (fn p1) (fn p2) (fn p)
-
-        L p ->
-            L (fn p)
-
-
-side : Hook -> Bool -> List PathElement
-side hook isInitial =
+sidePath : Hook -> Bool -> List PathElement
+sidePath hook isInitial =
     let
         initial =
             if isInitial then
@@ -153,23 +122,34 @@ side hook isInitial =
 
         sink =
             0.03
+
+        path deviation =
+            [ initial
+            , C ( (0.35 + deviation) / 2, 0 ) ( (0.35 + deviation) / 2, sink ) ( 0.35 + deviation, sink )
+            , C ( 0.5 + deviation, sink ) ( 0.2 + deviation, -height ) ( 0.5 + deviation, -height )
+            , C ( 0.8 + deviation, -height ) ( 0.5 + deviation, sink ) ( 0.65 + deviation, sink )
+            , C ( (1.65 + deviation) / 2, sink ) ( (1.65 + deviation) / 2, 0 ) ( 1, 0 )
+            ]
     in
         case hook of
             None ->
                 [ initial, L ( 1, 0 ) ]
 
             Positive deviation ->
-                [ initial
-                , C ( (0.35 + deviation) / 2, 0 ) ( (0.35 + deviation) / 2, sink ) ( 0.35 + deviation, sink )
-                , C ( 0.5 + deviation, sink ) ( 0.2 + deviation, -height ) ( 0.5 + deviation, -height )
-                , C ( 0.8 + deviation, -height ) ( 0.5 + deviation, sink ) ( 0.65 + deviation, sink )
-                , C ( (1.65 + deviation) / 2, sink ) ( (1.65 + deviation) / 2, 0 ) ( 1, 0 )
-                ]
+                path deviation
 
             Negative deviation ->
-                [ initial
-                , C ( (0.35 + deviation) / 2, 0 ) ( (0.35 + deviation) / 2, -sink ) ( 0.35 + deviation, -sink )
-                , C ( 0.5 + deviation, -sink ) ( 0.2 + deviation, height ) ( 0.5 + deviation, height )
-                , C ( 0.8 + deviation, height ) ( 0.5 + deviation, -sink ) ( 0.65 + deviation, -sink )
-                , C ( (1.65 + deviation) / 2, -sink ) ( (1.65 + deviation) / 2, 0 ) ( 1, 0 )
-                ]
+                path deviation |> List.map (translate (\( x, y ) -> ( x, -y )))
+
+
+translate : (Point -> Point) -> PathElement -> PathElement
+translate fn pathElement =
+    case pathElement of
+        M p ->
+            M (fn p)
+
+        C p1 p2 p ->
+            C (fn p1) (fn p2) (fn p)
+
+        L p ->
+            L (fn p)
