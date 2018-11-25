@@ -77,17 +77,12 @@ generateGroups sizeX sizeY pieceSize seed =
         ( generatedPieces, lastSeed ) =
             plain |> List.foldl reducePieces ( plain, seed )
     in
-        ( generatedPieces
-            |> List.indexedMap
-                (\index piece ->
-                    ( index
-                    , { pieces = [ piece ]
-                      , position = defaultPosition pieceSize [ piece ]
-                      , isSettled = True
-                      }
-                    )
-                )
-            |> Dict.fromList
+        ( Dict.singleton 0
+            { pieces = generatedPieces
+            , isSettled = True
+            , zIndex = 0
+            , position = defaultPosition pieceSize generatedPieces
+            }
         , lastSeed
         )
 
@@ -261,7 +256,7 @@ update msg model =
 
         ( _, Scatter ) ->
             let
-                reduceGroups groupId group ( passed, seed0 ) =
+                reducePieces piece ( passed, index, seed0 ) =
                     let
                         ( x, seed1 ) =
                             Random.step (Random.int 0 ((model.sizeX - 1) * model.pieceSize)) seed0
@@ -270,15 +265,22 @@ update msg model =
                             Random.step (Random.int 0 ((model.sizeY - 1) * model.pieceSize)) seed1
                     in
                         ( Dict.insert
-                            groupId
-                            { group | position = ( x, y ), isSettled = False }
+                            index
+                            { pieces = [ piece ]
+                            , position = ( x, y )
+                            , isSettled = False
+                            , zIndex = 0
+                            }
                             passed
+                        , index + 1
                         , seed2
                         )
 
-                ( groups, seed ) =
+                ( groups, _, seed ) =
                     model.groups
-                        |> Dict.foldl reduceGroups ( Dict.empty, model.seed )
+                        |> Dict.toList
+                        |> List.concatMap (\( _, { pieces } ) -> pieces)
+                        |> List.foldl reducePieces ( Dict.empty, 0, model.seed )
             in
                 { model
                     | groups = groups
@@ -316,61 +318,59 @@ isCorrectDrop { pieceSize } group =
 
 updateGroupsOnDrop : Model -> PieceGroupId -> Dict PieceGroupId PieceGroup -> Dict PieceGroupId PieceGroup
 updateGroupsOnDrop model targetGroupId groups =
-    let
-        ( mergeableGroups, restGroups ) =
-            groups |> Dict.partition (\groupId group -> groupId == targetGroupId || isMergeable group group)
+    Dict.get targetGroupId groups
+        |> Maybe.map
+            (\targetGroup ->
+                let
+                    ( mergeableGroups, restGroups ) =
+                        groups |> Dict.partition (\groupId group -> groupId == targetGroupId || isMergeable group targetGroup)
 
-        mergeableGroupList =
-            mergeableGroups
-                |> Dict.toList
+                    mergeableGroupList =
+                        mergeableGroups
+                            |> Dict.toList
 
-        mergedGroupId =
-            mergeableGroupList
-                |> List.map (\( id, _ ) -> id)
-                |> List.minimum
-                |> Maybe.withDefault targetGroupId
+                    mergedGroupId =
+                        mergeableGroupList
+                            |> List.map (\( id, _ ) -> id)
+                            |> List.minimum
+                            |> Maybe.withDefault targetGroupId
 
-        mergedGroup =
-            { pieces =
-                mergeableGroupList
-                    |> List.concatMap (\( _, group ) -> group.pieces)
-            , isSettled = mergeableGroups |> Dict.toList |> List.any (\( _, { isSettled } ) -> isSettled)
-            , position =
-                ( mergeableGroupList
-                    |> List.map (\( _, { position } ) -> Tuple.first position)
-                    |> List.minimum
-                    |> Maybe.withDefault 0
-                , mergeableGroupList
-                    |> List.map (\( _, { position } ) -> Tuple.second position)
-                    |> List.minimum
-                    |> Maybe.withDefault 0
-                )
-            }
-    in
-        Dict.insert mergedGroupId mergedGroup restGroups
-
-
-isMergeable : PieceGroup -> PieceGroup -> Bool
-isMergeable group anotherGroup =
-    False
-
-
-
-{-
-   groups
-        |> List.foldl
-            (\group passed ->
-                if group.id /= targetGroupId then
-                    List.concat [ passed, [ group ] ]
+                    mergedGroup =
+                        { pieces =
+                            mergeableGroupList
+                                |> List.concatMap (\( _, group ) -> group.pieces)
+                        , isSettled = mergeableGroups |> Dict.toList |> List.any (\( _, { isSettled } ) -> isSettled)
+                        , position =
+                            ( mergeableGroupList
+                                |> List.map (\( _, { position } ) -> Tuple.first position)
+                                |> List.minimum
+                                |> Maybe.withDefault 0
+                            , mergeableGroupList
+                                |> List.map (\( _, { position } ) -> Tuple.second position)
+                                |> List.minimum
+                                |> Maybe.withDefault 0
+                            )
+                        , zIndex =
+                            groups
+                                |> Dict.toList
+                                |> List.map (\( _, { zIndex } ) -> zIndex + 1)
+                                |> List.maximum
+                                |> Maybe.withDefault 0
+                        }
+                in
+                    Dict.insert mergedGroupId mergedGroup restGroups
+            )
+        |> Maybe.withDefault groups
+        |> Dict.map
+            (\groupId group ->
+                if groupId /= targetGroupId then
+                    group
                 else if isCorrectDrop model group then
-                    List.concat
-                        [ passed
-                        , [ { group
-                                | position = defaultPosition model.pieceSize group.pieces
-                                , isSettled = True
-                            }
-                          ]
-                        ]
+                    { group
+                        | position = defaultPosition model.pieceSize group.pieces
+                        , isSettled = True
+                        , zIndex = 0
+                    }
                 else
                     let
                         ( pX, pY ) =
@@ -384,16 +384,15 @@ isMergeable group anotherGroup =
                             else
                                 position
                     in
-                        List.concat
-                            [ passed
-                            , [ { group
-                                    | position =
-                                        ( withSnapApplied ( 0, (model.sizeX - 1) * model.pieceSize ) pX
-                                        , withSnapApplied ( 0, (model.sizeY - 1) * model.pieceSize ) pY
-                                        )
-                                }
-                              ]
-                            ]
+                        { group
+                            | position =
+                                ( withSnapApplied ( 0, (model.sizeX - 1) * model.pieceSize ) pX
+                                , withSnapApplied ( 0, (model.sizeY - 1) * model.pieceSize ) pY
+                                )
+                        }
             )
-            []
--}
+
+
+isMergeable : PieceGroup -> PieceGroup -> Bool
+isMergeable group anotherGroup =
+    False

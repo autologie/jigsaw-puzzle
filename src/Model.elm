@@ -34,6 +34,7 @@ type alias PieceGroup =
     { pieces : List Piece
     , position : ( Int, Int )
     , isSettled : Bool
+    , zIndex : Int
     }
 
 

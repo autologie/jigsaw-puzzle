@@ -37,15 +37,22 @@ view { sizeX, sizeY, pieceSize, groups, dragging } =
             (groups
                 |> Dict.toList
                 |> List.sortBy
-                    (groupZIndex
-                        (dragging
-                            |> Maybe.map (\( id, _ ) -> id)
-                        )
+                    (\( groupId, group ) ->
+                        dragging
+                            |> Maybe.andThen
+                                (\( id, _ ) ->
+                                    if id == groupId then
+                                        Just 1000
+                                    else
+                                        Nothing
+                                )
+                            |> Maybe.withDefault group.zIndex
                     )
                 |> List.concatMap (groupViews pieceSize)
             )
         , Html.button [ onClick Scatter ] [ Html.text "Scatter" ]
         , Html.button [ onClick Reset ] [ Html.text "New Puzzle" ]
+        , Html.span [] [ Html.text ("# of groups: " ++ (String.fromInt (Dict.size groups))) ]
         ]
 
 
@@ -181,17 +188,3 @@ translate fn pathElement =
 
         L p ->
             L (fn p)
-
-
-groupZIndex : Maybe PieceGroupId -> ( PieceGroupId, PieceGroup ) -> Int
-groupZIndex draggingGroupId ( groupId, group ) =
-    if group.isSettled then
-        -1
-    else if
-        draggingGroupId
-            |> Maybe.map (\id -> id == groupId)
-            |> Maybe.withDefault False
-    then
-        1
-    else
-        0
