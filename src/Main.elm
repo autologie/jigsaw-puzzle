@@ -59,24 +59,22 @@ generatePieces sizeX sizeY pieceSize seed =
             else
                 hooks
 
-        ( generatedPieces, lastSeed ) =
-            plain
-                |> List.foldl
-                    (\(Piece position hooks) ( pieces, mySeed ) ->
-                        let
-                            ( generatedHooks, updatedSeed ) =
-                                generateHooks mySeed
-                        in
-                            ( withHooksAssigned position
-                                (generatedHooks
-                                    |> trimX position
-                                    |> trimY position
-                                )
-                                pieces
-                            , updatedSeed
-                            )
+        reducePieces (Piece position hooks) ( pieces, mySeed ) =
+            let
+                ( generatedHooks, updatedSeed ) =
+                    generateHooks mySeed
+            in
+                ( withHooksAssigned position
+                    (generatedHooks
+                        |> trimX position
+                        |> trimY position
                     )
-                    ( plain, seed )
+                    pieces
+                , updatedSeed
+                )
+
+        ( generatedPieces, lastSeed ) =
+            plain |> List.foldl reducePieces ( plain, seed )
     in
         ( generatedPieces
             |> List.map
@@ -97,18 +95,17 @@ plainPieces sizeX sizeY =
                 List.range 0 (sizeY - 1)
                     |> List.map
                         (\y ->
-                            Piece { x = x, y = y }
-                                noHooks
+                            Piece
+                                { x = x
+                                , y = y
+                                }
+                                { north = None
+                                , east = None
+                                , south = None
+                                , west = None
+                                }
                         )
             )
-
-
-noHooks =
-    { north = None
-    , east = None
-    , south = None
-    , west = None
-    }
 
 
 generateHooks : Seed -> ( Hooks, Seed )
@@ -117,13 +114,19 @@ generateHooks seed0 =
         maxDeviation =
             0.06
 
+        deviationGenerator =
+            Random.float -maxDeviation maxDeviation
+
+        hookTypeGenerator =
+            Random.uniform (Positive 0 0) [ (Negative 0 0) ]
+
         withDeviation ( hook, seed00 ) =
             let
                 ( positionDeviation, seed01 ) =
-                    Random.step (Random.float -maxDeviation maxDeviation) seed00
+                    Random.step deviationGenerator seed00
 
                 ( sizeDeviation, seed02 ) =
-                    Random.step (Random.float -maxDeviation maxDeviation) seed01
+                    Random.step deviationGenerator seed01
             in
                 case hook of
                     Positive _ _ ->
@@ -135,20 +138,17 @@ generateHooks seed0 =
                     None ->
                         ( None, seed02 )
 
-        generator =
-            Random.uniform (Positive 0 0) [ (Negative 0 0) ]
-
         ( north, seed1 ) =
-            Random.step generator seed0 |> withDeviation
+            Random.step hookTypeGenerator seed0 |> withDeviation
 
         ( east, seed2 ) =
-            Random.step generator seed1 |> withDeviation
+            Random.step hookTypeGenerator seed1 |> withDeviation
 
         ( south, seed3 ) =
-            Random.step generator seed2 |> withDeviation
+            Random.step hookTypeGenerator seed2 |> withDeviation
 
         ( west, seed4 ) =
-            Random.step generator seed3 |> withDeviation
+            Random.step hookTypeGenerator seed3 |> withDeviation
     in
         ( { north = north
           , east = east
@@ -300,13 +300,14 @@ defaultPosition pieceSize (Piece { x, y } _) =
 
 isCorrectDrop pieceSize { piece, position } =
     let
+        ( actualX, actualY ) =
+            position
+
         ( defaultX, defaultY ) =
             defaultPosition pieceSize piece
 
         distance =
-            case position of
-                ( actualX, actualY ) ->
-                    sqrt (toFloat (defaultX - actualX) ^ 2 + toFloat (defaultY - actualY) ^ 2)
+            sqrt (toFloat (defaultX - actualX) ^ 2 + toFloat (defaultY - actualY) ^ 2)
     in
         distance < 10
 
@@ -320,20 +321,24 @@ updatePieceOnDrop model targetPiece piece =
             , isSettled = True
         }
     else
-        case ( piece.position, piece.piece ) of
-            ( ( pX, pY ), Piece { x, y } _ ) ->
-                let
-                    withSnapApplied ( min, max ) position =
-                        if position < min + 10 then
-                            min
-                        else if position > max - 10 then
-                            max
-                        else
-                            position
-                in
-                    { piece
-                        | position =
-                            ( withSnapApplied ( 0, (model.sizeX - 1) * model.pieceSize ) pX
-                            , withSnapApplied ( 0, (model.sizeY - 1) * model.pieceSize ) pY
-                            )
-                    }
+        let
+            ( pX, pY ) =
+                piece.position
+
+            (Piece { x, y } _) =
+                piece.piece
+
+            withSnapApplied ( min, max ) position =
+                if position < min + 10 then
+                    min
+                else if position > max - 10 then
+                    max
+                else
+                    position
+        in
+            { piece
+                | position =
+                    ( withSnapApplied ( 0, (model.sizeX - 1) * model.pieceSize ) pX
+                    , withSnapApplied ( 0, (model.sizeY - 1) * model.pieceSize ) pY
+                    )
+            }
