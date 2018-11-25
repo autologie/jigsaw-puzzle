@@ -45,11 +45,11 @@ groupViews pieceSize group =
         ( x, y ) =
             group.position
     in
-        group.pieces |> List.map (pieceView x y pieceSize)
+        group.pieces |> List.map (pieceView x y pieceSize group)
 
 
-pieceView : Int -> Int -> Int -> Piece -> Svg Msg
-pieceView groupX groupY pieceSize piece =
+pieceView : Int -> Int -> Int -> PieceGroup -> Piece -> Svg Msg
+pieceView groupX groupY pieceSize group piece =
     g
         [ transform ("translate(" ++ (String.fromInt groupX) ++ "," ++ (String.fromInt groupY) ++ ")") ]
         [ Svg.path
@@ -58,7 +58,7 @@ pieceView groupX groupY pieceSize piece =
             , fill "white"
             , on "mousedown"
                 (Decode.map
-                    (\position -> StartDragging piece position)
+                    (\position -> StartDragging group position)
                     (Decode.map2 (\x y -> ( x - groupX, y - groupY ))
                         (Decode.at [ "offsetX" ] Decode.int)
                         (Decode.at [ "offsetY" ] Decode.int)

@@ -25,8 +25,13 @@ type Hook
     | None
 
 
+type alias PieceGroupId =
+    Int
+
+
 type alias PieceGroup =
-    { pieces : List Piece
+    { id : PieceGroupId
+    , pieces : List Piece
     , position : ( Int, Int )
     , isSettled : Bool
     }
@@ -37,13 +42,13 @@ type alias Model =
     , sizeY : Int
     , pieceSize : Int
     , groups : List PieceGroup
-    , dragging : Maybe ( Piece, ( Int, Int ) )
+    , dragging : Maybe ( PieceGroupId, ( Int, Int ) )
     , seed : Random.Seed
     }
 
 
 type Msg
-    = StartDragging Piece ( Int, Int )
+    = StartDragging PieceGroup ( Int, Int )
     | EndDragging
     | MouseMove ( Int, Int )
     | Scatter

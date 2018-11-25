@@ -77,9 +77,10 @@ generateGroups sizeX sizeY pieceSize seed =
             plain |> List.foldl reducePieces ( plain, seed )
     in
         ( generatedPieces
-            |> List.map
-                (\piece ->
-                    { pieces = [ piece ]
+            |> List.indexedMap
+                (\index piece ->
+                    { id = index
+                    , pieces = [ piece ]
                     , position = defaultPosition pieceSize [ piece ]
                     , isSettled = True
                     }
@@ -214,28 +215,28 @@ negate hook =
 update : Msg -> Model -> Model
 update msg model =
     case ( model.dragging, msg ) of
-        ( Nothing, StartDragging targetPiece touchPosition ) ->
+        ( Nothing, StartDragging targetGroup touchPosition ) ->
             { model
-                | dragging = Just ( targetPiece, touchPosition )
+                | dragging = Just ( targetGroup.id, touchPosition )
                 , groups =
                     model.groups
                         |> List.map (\group -> { group | isSettled = False })
-                        |> List.sortBy (sortOrderOfPiece targetPiece)
+                        |> List.sortBy (sortOrderOfGroup targetGroup.id)
             }
 
-        ( Just ( targetPiece, _ ), EndDragging ) ->
+        ( Just ( targetGroupId, _ ), EndDragging ) ->
             { model
                 | dragging = Nothing
                 , groups =
                     model.groups
-                        |> List.map (updatePieceOnDrop model targetPiece)
-                        |> List.sortBy (sortOrderOfPiece targetPiece)
+                        |> updateGroupsOnDrop model targetGroupId
+                        |> List.sortBy (sortOrderOfGroup targetGroupId)
             }
 
-        ( Just ( draggingPiece, ( touchX, touchY ) ), MouseMove ( x, y ) ) ->
+        ( Just ( draggingGroupId, ( touchX, touchY ) ), MouseMove ( x, y ) ) ->
             let
                 updatePosition group =
-                    if group.pieces == [ draggingPiece ] then
+                    if group.id == draggingGroupId then
                         { group | position = ( x - touchX, y - touchY ) }
                     else
                         group
@@ -286,11 +287,11 @@ update msg model =
             model
 
 
-sortOrderOfPiece : Piece -> PieceGroup -> Int
-sortOrderOfPiece targetPiece group =
+sortOrderOfGroup : PieceGroupId -> PieceGroup -> Int
+sortOrderOfGroup targetGroupId group =
     if group.isSettled then
         -1
-    else if group.pieces == [ targetPiece ] then
+    else if group.id == targetGroupId then
         1
     else
         0
@@ -321,31 +322,44 @@ isCorrectDrop { pieceSize } group =
         distance < 10
 
 
-updatePieceOnDrop : Model -> Piece -> PieceGroup -> PieceGroup
-updatePieceOnDrop model targetPiece group =
-    if group.pieces /= [ targetPiece ] then
-        group
-    else if isCorrectDrop model group then
-        { group
-            | position = defaultPosition model.pieceSize group.pieces
-            , isSettled = True
-        }
-    else
-        let
-            ( pX, pY ) =
-                group.position
-
-            withSnapApplied ( min, max ) position =
-                if position < min + 10 then
-                    min
-                else if position > max - 10 then
-                    max
+updateGroupsOnDrop : Model -> PieceGroupId -> List PieceGroup -> List PieceGroup
+updateGroupsOnDrop model targetGroupId groups =
+    groups
+        |> List.foldl
+            (\group passed ->
+                if group.id /= targetGroupId then
+                    List.concat [ passed, [ group ] ]
+                else if isCorrectDrop model group then
+                    List.concat
+                        [ passed
+                        , [ { group
+                                | position = defaultPosition model.pieceSize group.pieces
+                                , isSettled = True
+                            }
+                          ]
+                        ]
                 else
-                    position
-        in
-            { group
-                | position =
-                    ( withSnapApplied ( 0, (model.sizeX - 1) * model.pieceSize ) pX
-                    , withSnapApplied ( 0, (model.sizeY - 1) * model.pieceSize ) pY
-                    )
-            }
+                    let
+                        ( pX, pY ) =
+                            group.position
+
+                        withSnapApplied ( min, max ) position =
+                            if position < min + 10 then
+                                min
+                            else if position > max - 10 then
+                                max
+                            else
+                                position
+                    in
+                        List.concat
+                            [ passed
+                            , [ { group
+                                    | position =
+                                        ( withSnapApplied ( 0, (model.sizeX - 1) * model.pieceSize ) pX
+                                        , withSnapApplied ( 0, (model.sizeY - 1) * model.pieceSize ) pY
+                                        )
+                                }
+                              ]
+                            ]
+            )
+            []
