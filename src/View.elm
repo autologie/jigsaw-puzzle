@@ -1,14 +1,15 @@
 module View exposing (view)
 
 import Json.Decode as Decode exposing (Decoder)
-import Html
+import Html exposing (Html)
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
 import Svg.Events exposing (..)
 import Model exposing (..)
 
 
-view { sizeX, sizeY, pieceSize, pieces, dragging } =
+view : Model -> Html Msg
+view { sizeX, sizeY, pieceSize, groups, dragging } =
     Html.div []
         [ svg
             [ width (String.fromInt (sizeX * pieceSize))
@@ -32,41 +33,47 @@ view { sizeX, sizeY, pieceSize, pieces, dragging } =
                     )
                 )
             ]
-            (pieces |> List.map (pieceView pieceSize))
+            (groups |> List.concatMap (groupViews pieceSize))
         , Html.button [ onClick Scatter ] [ Html.text "Scatter" ]
         , Html.button [ onClick Reset ] [ Html.text "New Puzzle" ]
         ]
 
 
-pieceView pieceSize piece =
+groupViews : Int -> PieceGroup -> List (Svg Msg)
+groupViews pieceSize group =
     let
-        ( myX, myY ) =
-            piece.position
+        ( x, y ) =
+            group.position
     in
-        g
-            [ transform ("translate(" ++ (String.fromInt myX) ++ "," ++ (String.fromInt myY) ++ ")") ]
-            [ Svg.path
-                [ d (piecePath pieceSize piece.piece)
-                , stroke "red"
-                , fill "white"
-                , on "mousedown"
-                    (Decode.map
-                        (\position -> StartDragging piece.piece position)
-                        (Decode.map2 (\x y -> ( x - myX, y - myY ))
-                            (Decode.at [ "offsetX" ] Decode.int)
-                            (Decode.at [ "offsetY" ] Decode.int)
-                        )
+        group.pieces |> List.map (pieceView x y pieceSize)
+
+
+pieceView : Int -> Int -> Int -> Piece -> Svg Msg
+pieceView groupX groupY pieceSize piece =
+    g
+        [ transform ("translate(" ++ (String.fromInt groupX) ++ "," ++ (String.fromInt groupY) ++ ")") ]
+        [ Svg.path
+            [ d (piecePath pieceSize piece)
+            , stroke "red"
+            , fill "white"
+            , on "mousedown"
+                (Decode.map
+                    (\position -> StartDragging piece position)
+                    (Decode.map2 (\x y -> ( x - groupX, y - groupY ))
+                        (Decode.at [ "offsetX" ] Decode.int)
+                        (Decode.at [ "offsetY" ] Decode.int)
                     )
-                , onMouseUp EndDragging
-                ]
-                []
-            , text_
-                [ x "0"
-                , y "20"
-                , fill "black"
-                ]
-                []
+                )
+            , onMouseUp EndDragging
             ]
+            []
+        , text_
+            [ x "0"
+            , y "20"
+            , fill "black"
+            ]
+            []
+        ]
 
 
 type PathElement

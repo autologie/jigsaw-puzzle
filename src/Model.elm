@@ -25,8 +25,8 @@ type Hook
     | None
 
 
-type alias PieceScattering =
-    { piece : Piece
+type alias PieceGroup =
+    { pieces : List Piece
     , position : ( Int, Int )
     , isSettled : Bool
     }
@@ -36,7 +36,7 @@ type alias Model =
     { sizeX : Int
     , sizeY : Int
     , pieceSize : Int
-    , pieces : List PieceScattering
+    , groups : List PieceGroup
     , dragging : Maybe ( Piece, ( Int, Int ) )
     , seed : Random.Seed
     }

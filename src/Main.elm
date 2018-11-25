@@ -26,19 +26,19 @@ initialModel =
         pieceSize =
             50
 
-        ( pieces, seed ) =
-            generatePieces sizeX sizeY pieceSize (Random.initialSeed 0)
+        ( groups, seed ) =
+            generateGroups sizeX sizeY pieceSize (Random.initialSeed 0)
     in
         { sizeX = sizeX
         , sizeY = sizeY
         , pieceSize = pieceSize
-        , pieces = pieces
+        , groups = groups
         , dragging = Nothing
         , seed = seed
         }
 
 
-generatePieces sizeX sizeY pieceSize seed =
+generateGroups sizeX sizeY pieceSize seed =
     let
         plain =
             plainPieces sizeX sizeY
@@ -79,8 +79,8 @@ generatePieces sizeX sizeY pieceSize seed =
         ( generatedPieces
             |> List.map
                 (\piece ->
-                    { piece = piece
-                    , position = defaultPosition pieceSize piece
+                    { pieces = [ piece ]
+                    , position = defaultPosition pieceSize [ piece ]
                     , isSettled = True
                     }
                 )
@@ -211,40 +211,41 @@ negate hook =
             Positive -positionDeviation sizeDiviation
 
 
+update : Msg -> Model -> Model
 update msg model =
     case ( model.dragging, msg ) of
         ( Nothing, StartDragging targetPiece touchPosition ) ->
             { model
                 | dragging = Just ( targetPiece, touchPosition )
-                , pieces =
-                    model.pieces
-                        |> List.map (\piece -> { piece | isSettled = False })
+                , groups =
+                    model.groups
+                        |> List.map (\group -> { group | isSettled = False })
                         |> List.sortBy (sortOrderOfPiece targetPiece)
             }
 
         ( Just ( targetPiece, _ ), EndDragging ) ->
             { model
                 | dragging = Nothing
-                , pieces =
-                    model.pieces
+                , groups =
+                    model.groups
                         |> List.map (updatePieceOnDrop model targetPiece)
                         |> List.sortBy (sortOrderOfPiece targetPiece)
             }
 
         ( Just ( draggingPiece, ( touchX, touchY ) ), MouseMove ( x, y ) ) ->
             let
-                updatePosition piece =
-                    if piece.piece == draggingPiece then
-                        { piece | position = ( x - touchX, y - touchY ) }
+                updatePosition group =
+                    if group.pieces == [ draggingPiece ] then
+                        { group | position = ( x - touchX, y - touchY ) }
                     else
-                        piece
+                        group
             in
-                { model | pieces = model.pieces |> List.map updatePosition }
+                { model | groups = model.groups |> List.map updatePosition }
 
         ( _, Reset ) ->
             let
-                ( pieces, seed ) =
-                    generatePieces
+                ( groups, seed ) =
+                    generateGroups
                         model.sizeX
                         model.sizeY
                         model.pieceSize
@@ -252,13 +253,13 @@ update msg model =
             in
                 { model
                     | dragging = Nothing
-                    , pieces = pieces
+                    , groups = groups
                     , seed = seed
                 }
 
         ( _, Scatter ) ->
             let
-                reducePieces piece ( passed, seed0 ) =
+                reduceGroups group ( passed, seed0 ) =
                     let
                         ( x, seed1 ) =
                             Random.step (Random.int 0 ((model.sizeX - 1) * model.pieceSize)) seed0
@@ -268,16 +269,16 @@ update msg model =
                     in
                         ( List.concat
                             [ passed
-                            , [ { piece | position = ( x, y ), isSettled = False } ]
+                            , [ { group | position = ( x, y ), isSettled = False } ]
                             ]
                         , seed2
                         )
 
-                ( pieces, seed ) =
-                    model.pieces |> List.foldl reducePieces ( [], model.seed )
+                ( groups, seed ) =
+                    model.groups |> List.foldl reduceGroups ( [], model.seed )
             in
                 { model
-                    | pieces = pieces
+                    | groups = groups
                     , seed = seed
                 }
 
@@ -285,26 +286,34 @@ update msg model =
             model
 
 
-sortOrderOfPiece targetPiece piece =
-    if piece.isSettled then
+sortOrderOfPiece : Piece -> PieceGroup -> Int
+sortOrderOfPiece targetPiece group =
+    if group.isSettled then
         -1
-    else if piece.piece == targetPiece then
+    else if group.pieces == [ targetPiece ] then
         1
     else
         0
 
 
-defaultPosition pieceSize (Piece { x, y } _) =
-    ( x * pieceSize, y * pieceSize )
+defaultPosition : Int -> List Piece -> ( Int, Int )
+defaultPosition pieceSize pieces =
+    case pieces |> List.head of
+        Just (Piece { x, y } _) ->
+            ( x * pieceSize, y * pieceSize )
+
+        Nothing ->
+            ( 0, 0 )
 
 
-isCorrectDrop pieceSize { piece, position } =
+isCorrectDrop : Model -> PieceGroup -> Bool
+isCorrectDrop { pieceSize } group =
     let
         ( actualX, actualY ) =
-            position
+            group.position
 
         ( defaultX, defaultY ) =
-            defaultPosition pieceSize piece
+            defaultPosition pieceSize group.pieces
 
         distance =
             sqrt (toFloat (defaultX - actualX) ^ 2 + toFloat (defaultY - actualY) ^ 2)
@@ -312,21 +321,19 @@ isCorrectDrop pieceSize { piece, position } =
         distance < 10
 
 
-updatePieceOnDrop model targetPiece piece =
-    if piece.piece /= targetPiece then
-        piece
-    else if isCorrectDrop model.pieceSize piece then
-        { piece
-            | position = defaultPosition model.pieceSize piece.piece
+updatePieceOnDrop : Model -> Piece -> PieceGroup -> PieceGroup
+updatePieceOnDrop model targetPiece group =
+    if group.pieces /= [ targetPiece ] then
+        group
+    else if isCorrectDrop model group then
+        { group
+            | position = defaultPosition model.pieceSize group.pieces
             , isSettled = True
         }
     else
         let
             ( pX, pY ) =
-                piece.position
-
-            (Piece { x, y } _) =
-                piece.piece
+                group.position
 
             withSnapApplied ( min, max ) position =
                 if position < min + 10 then
@@ -336,7 +343,7 @@ updatePieceOnDrop model targetPiece piece =
                 else
                     position
         in
-            { piece
+            { group
                 | position =
                     ( withSnapApplied ( 0, (model.sizeX - 1) * model.pieceSize ) pX
                     , withSnapApplied ( 0, (model.sizeY - 1) * model.pieceSize ) pY
