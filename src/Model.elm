@@ -20,8 +20,8 @@ type alias Hooks =
 
 
 type Hook
-    = Positive Float
-    | Negative Float
+    = Positive Float Float
+    | Negative Float Float
     | None
 
 

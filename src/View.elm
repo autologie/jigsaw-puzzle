@@ -117,29 +117,40 @@ sidePath hook isInitial =
             else
                 L ( 0, 0 )
 
-        height =
-            0.3
+        path d1 d2 =
+            let
+                height =
+                    0.3 - d2
 
-        sink =
-            0.03
+                sink =
+                    0.03
 
-        path deviation =
-            [ initial
-            , C ( (0.35 + deviation) / 2, 0 ) ( (0.35 + deviation) / 2, sink ) ( 0.35 + deviation, sink )
-            , C ( 0.5 + deviation, sink ) ( 0.2 + deviation, -height ) ( 0.5 + deviation, -height )
-            , C ( 0.8 + deviation, -height ) ( 0.5 + deviation, sink ) ( 0.65 + deviation, sink )
-            , C ( (1.65 + deviation) / 2, sink ) ( (1.65 + deviation) / 2, 0 ) ( 1, 0 )
-            ]
+                a =
+                    0.35 + d2
+
+                c =
+                    0.5
+
+                w =
+                    0.3
+            in
+                [ initial
+                , C ( (a + d1) / 2, 0 ) ( (a + d1) / 2, sink ) ( a + d1, sink )
+                , C ( c + d1, sink ) ( c - w + d1, -height ) ( c + d1, -height )
+                , C ( c + w + d1, -height ) ( c + d1, sink ) ( (1 - a) + d1, sink )
+                , C ( ((2 - a) + d1) / 2, sink ) ( ((2 - a) + d1) / 2, 0 ) ( 1, 0 )
+                ]
     in
         case hook of
             None ->
                 [ initial, L ( 1, 0 ) ]
 
-            Positive deviation ->
-                path deviation
+            Positive positionDeviation sizeDiviation ->
+                path positionDeviation sizeDiviation
 
-            Negative deviation ->
-                path deviation |> List.map (translate (\( x, y ) -> ( x, -y )))
+            Negative positionDeviation sizeDiviation ->
+                path positionDeviation sizeDiviation
+                    |> List.map (translate (\( x, y ) -> ( x, -y )))
 
 
 translate : (Point -> Point) -> PathElement -> PathElement

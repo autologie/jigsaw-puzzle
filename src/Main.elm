@@ -117,23 +117,26 @@ generateHooks seed0 =
         maxDeviation =
             0.06
 
-        withDeviation ( hook, seed ) =
+        withDeviation ( hook, seed00 ) =
             let
-                ( deviation, updatedSeed ) =
-                    Random.step (Random.float -maxDeviation maxDeviation) seed
+                ( positionDeviation, seed01 ) =
+                    Random.step (Random.float -maxDeviation maxDeviation) seed00
+
+                ( sizeDeviation, seed02 ) =
+                    Random.step (Random.float -maxDeviation maxDeviation) seed01
             in
                 case hook of
-                    Positive _ ->
-                        ( Positive deviation, updatedSeed )
+                    Positive _ _ ->
+                        ( Positive positionDeviation sizeDeviation, seed02 )
 
-                    Negative _ ->
-                        ( Negative deviation, updatedSeed )
+                    Negative _ _ ->
+                        ( Negative positionDeviation sizeDeviation, seed02 )
 
                     None ->
-                        ( None, updatedSeed )
+                        ( None, seed02 )
 
         generator =
-            Random.uniform (Positive 0) [ (Negative 0) ]
+            Random.uniform (Positive 0 0) [ (Negative 0 0) ]
 
         ( north, seed1 ) =
             Random.step generator seed0 |> withDeviation
@@ -201,11 +204,11 @@ negate hook =
         None ->
             None
 
-        Positive deviation ->
-            Negative -deviation
+        Positive positionDeviation sizeDiviation ->
+            Negative -positionDeviation sizeDiviation
 
-        Negative deviation ->
-            Positive -deviation
+        Negative positionDeviation sizeDiviation ->
+            Positive -positionDeviation sizeDiviation
 
 
 update msg model =
