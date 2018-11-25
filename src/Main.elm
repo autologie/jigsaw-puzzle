@@ -83,6 +83,7 @@ generatePieces sizeX sizeY pieceSize seed =
                 (\piece ->
                     { piece = piece
                     , position = defaultPosition pieceSize piece
+                    , isSettled = True
                     }
                 )
         , lastSeed
@@ -210,22 +211,21 @@ negate hook =
 update msg model =
     case ( model.dragging, msg ) of
         ( Nothing, StartDragging targetPiece touchPosition ) ->
-            let
-                bringTargetToTop piece =
-                    if piece.piece == targetPiece then
-                        1
-                    else
-                        0
-            in
-                { model
-                    | dragging = Just ( targetPiece, touchPosition )
-                    , pieces = model.pieces |> List.sortBy bringTargetToTop
-                }
+            { model
+                | dragging = Just ( targetPiece, touchPosition )
+                , pieces =
+                    model.pieces
+                        |> List.map (\piece -> { piece | isSettled = False })
+                        |> List.sortBy (sortOrderOfPiece targetPiece)
+            }
 
         ( Just ( targetPiece, _ ), EndDragging ) ->
             { model
                 | dragging = Nothing
-                , pieces = model.pieces |> List.map (updatePieceOnDrop model targetPiece)
+                , pieces =
+                    model.pieces
+                        |> List.map (updatePieceOnDrop model targetPiece)
+                        |> List.sortBy (sortOrderOfPiece targetPiece)
             }
 
         ( Just ( draggingPiece, ( touchX, touchY ) ), MouseMove ( x, y ) ) ->
@@ -265,7 +265,7 @@ update msg model =
                     in
                         ( List.concat
                             [ passed
-                            , [ { piece | position = ( x, y ) } ]
+                            , [ { piece | position = ( x, y ), isSettled = False } ]
                             ]
                         , seed2
                         )
@@ -280,6 +280,15 @@ update msg model =
 
         _ ->
             model
+
+
+sortOrderOfPiece targetPiece piece =
+    if piece.isSettled then
+        -1
+    else if piece.piece == targetPiece then
+        1
+    else
+        0
 
 
 defaultPosition pieceSize (Piece { x, y } _) =
@@ -305,6 +314,7 @@ updatePieceOnDrop model targetPiece piece =
     else if isCorrectDrop model.pieceSize piece then
         { piece
             | position = defaultPosition model.pieceSize piece.piece
+            , isSettled = True
         }
     else
         case ( piece.position, piece.piece ) of

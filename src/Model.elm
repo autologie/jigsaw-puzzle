@@ -28,6 +28,7 @@ type Hook
 type alias PieceScattering =
     { piece : Piece
     , position : ( Int, Int )
+    , isSettled : Bool
     }
 
 
