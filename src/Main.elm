@@ -39,10 +39,13 @@ initialModel =
         }
 
 
+generateGroups : Int -> Int -> Int -> Seed -> ( Dict PieceGroupId PieceGroup, Seed )
 generateGroups sizeX sizeY pieceSize seed =
     let
         plain =
             plainPieces sizeX sizeY
+                |> List.map (\((Piece { x, y } _) as piece) -> ( ( x, y ), piece ))
+                |> Dict.fromList
 
         trimX position hooks =
             if position.x == 0 then
@@ -60,12 +63,13 @@ generateGroups sizeX sizeY pieceSize seed =
             else
                 hooks
 
-        reducePieces (Piece position hooks) ( pieces, mySeed ) =
+        reducePieces _ (Piece position hooks) ( pieces, mySeed ) =
             let
                 ( generatedHooks, updatedSeed ) =
                     generateHooks mySeed
             in
-                ( withHooksAssigned position
+                ( withHooksAssigned
+                    position
                     (generatedHooks
                         |> trimX position
                         |> trimY position
@@ -75,7 +79,7 @@ generateGroups sizeX sizeY pieceSize seed =
                 )
 
         ( generatedPieces, lastSeed ) =
-            plain |> List.foldl reducePieces ( plain, seed )
+            plain |> Dict.foldl reducePieces ( plain, seed )
     in
         ( Dict.singleton 0
             { pieces = generatedPieces
@@ -87,6 +91,7 @@ generateGroups sizeX sizeY pieceSize seed =
         )
 
 
+plainPieces : Int -> Int -> List Piece
 plainPieces sizeX sizeY =
     List.range 0 (sizeX - 1)
         |> List.concatMap
@@ -158,7 +163,7 @@ generateHooks seed0 =
         )
 
 
-withHooksAssigned : Position -> Hooks -> List Piece -> List Piece
+withHooksAssigned : Position -> Hooks -> Dict ( Int, Int ) Piece -> Dict ( Int, Int ) Piece
 withHooksAssigned { x, y } { north, east, south, west } pieces =
     let
         distanceTo position =
@@ -167,7 +172,7 @@ withHooksAssigned { x, y } { north, east, south, west } pieces =
             )
 
         assignHooks =
-            \(Piece position hooks) ->
+            \_ (Piece position hooks) ->
                 let
                     updatedHooks =
                         case distanceTo position of
@@ -195,7 +200,7 @@ withHooksAssigned { x, y } { north, east, south, west } pieces =
                 in
                     Piece position updatedHooks
     in
-        pieces |> List.map assignHooks
+        pieces |> Dict.map assignHooks
 
 
 negate hook =
@@ -266,7 +271,7 @@ update msg model =
                     in
                         ( Dict.insert
                             index
-                            { pieces = [ piece ]
+                            { pieces = Dict.singleton ( 0, 0 ) piece
                             , position = ( x, y )
                             , isSettled = False
                             , zIndex = 0
@@ -279,7 +284,7 @@ update msg model =
                 ( groups, _, seed ) =
                     model.groups
                         |> Dict.toList
-                        |> List.concatMap (\( _, { pieces } ) -> pieces)
+                        |> List.concatMap (\( _, { pieces } ) -> Dict.values pieces)
                         |> List.foldl reducePieces ( Dict.empty, 0, model.seed )
             in
                 { model
@@ -291,14 +296,18 @@ update msg model =
             model
 
 
-defaultPosition : Int -> List Piece -> ( Int, Int )
+defaultPosition : Int -> Dict ( Int, Int ) Piece -> ( Int, Int )
 defaultPosition pieceSize pieces =
-    case pieces |> List.head of
-        Just (Piece { x, y } _) ->
-            ( x * pieceSize, y * pieceSize )
-
-        Nothing ->
-            ( 0, 0 )
+    let
+        ( minX, minY ) =
+            pieces
+                |> Dict.foldl
+                    (\_ (Piece { x, y } _) ( passedX, passedY ) ->
+                        ( min passedX x, min passedY y )
+                    )
+                    ( 0, 0 )
+    in
+        ( minX * pieceSize, minY * pieceSize )
 
 
 isCorrectDrop : Model -> PieceGroup -> Bool
@@ -323,7 +332,11 @@ updateGroupsOnDrop model targetGroupId groups =
             (\targetGroup ->
                 let
                     ( mergeableGroups, restGroups ) =
-                        groups |> Dict.partition (\groupId group -> groupId == targetGroupId || isMergeable group targetGroup)
+                        groups
+                            |> Dict.partition
+                                (\groupId group ->
+                                    groupId == targetGroupId || isMergeable group targetGroup
+                                )
 
                     mergeableGroupList =
                         mergeableGroups
@@ -335,20 +348,43 @@ updateGroupsOnDrop model targetGroupId groups =
                             |> List.minimum
                             |> Maybe.withDefault targetGroupId
 
+                    mergedGroupX =
+                        mergeableGroupList
+                            |> List.map (\( _, { position } ) -> Tuple.first position)
+                            |> List.minimum
+                            |> Maybe.withDefault 0
+
+                    mergedGroupY =
+                        mergeableGroupList
+                            |> List.map (\( _, { position } ) -> Tuple.second position)
+                            |> List.minimum
+                            |> Maybe.withDefault 0
+
                     mergedGroup =
                         { pieces =
                             mergeableGroupList
-                                |> List.concatMap (\( _, group ) -> group.pieces)
+                                |> List.foldl
+                                    (\( _, { position, pieces } ) passed ->
+                                        let
+                                            groupX =
+                                                (Tuple.first position - mergedGroupX) // model.pieceSize
+
+                                            groupY =
+                                                (Tuple.second position - mergedGroupY) // model.pieceSize
+
+                                            updatedPieces =
+                                                pieces
+                                                    |> Dict.toList
+                                                    |> List.map (\( ( x, y ), piece ) -> ( ( x + groupX, y + groupY ), piece ))
+                                                    |> Dict.fromList
+                                        in
+                                            Dict.union passed updatedPieces
+                                    )
+                                    Dict.empty
                         , isSettled = mergeableGroups |> Dict.toList |> List.any (\( _, { isSettled } ) -> isSettled)
                         , position =
-                            ( mergeableGroupList
-                                |> List.map (\( _, { position } ) -> Tuple.first position)
-                                |> List.minimum
-                                |> Maybe.withDefault 0
-                            , mergeableGroupList
-                                |> List.map (\( _, { position } ) -> Tuple.second position)
-                                |> List.minimum
-                                |> Maybe.withDefault 0
+                            ( mergedGroupX
+                            , mergedGroupY
                             )
                         , zIndex =
                             groups

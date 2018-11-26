@@ -62,13 +62,22 @@ groupViews pieceSize ( groupId, group ) =
         ( x, y ) =
             group.position
     in
-        group.pieces |> List.map (pieceView x y pieceSize groupId)
+        group.pieces
+            |> Dict.map (pieceView x y pieceSize groupId)
+            |> Dict.values
 
 
-pieceView : Int -> Int -> Int -> PieceGroupId -> Piece -> Svg Msg
-pieceView groupX groupY pieceSize groupId piece =
+pieceView : Int -> Int -> Int -> PieceGroupId -> ( Int, Int ) -> Piece -> Svg Msg
+pieceView groupX groupY pieceSize groupId ( x, y ) piece =
     g
-        [ transform ("translate(" ++ (String.fromInt groupX) ++ "," ++ (String.fromInt groupY) ++ ")") ]
+        [ transform
+            ("translate("
+                ++ (String.fromInt (x * pieceSize + groupX))
+                ++ ","
+                ++ (String.fromInt (y * pieceSize + groupY))
+                ++ ")"
+            )
+        ]
         [ Svg.path
             [ d (piecePath pieceSize piece)
             , stroke "red"
@@ -76,7 +85,7 @@ pieceView groupX groupY pieceSize groupId piece =
             , on "mousedown"
                 (Decode.map
                     (\position -> StartDragging groupId position)
-                    (Decode.map2 (\x y -> ( x - groupX, y - groupY ))
+                    (Decode.map2 (\eventX eventY -> ( eventX - groupX, eventY - groupY ))
                         (Decode.at [ "offsetX" ] Decode.int)
                         (Decode.at [ "offsetY" ] Decode.int)
                     )
@@ -85,8 +94,8 @@ pieceView groupX groupY pieceSize groupId piece =
             ]
             []
         , text_
-            [ x "0"
-            , y "20"
+            [ Svg.Attributes.x "0"
+            , Svg.Attributes.y "20"
             , fill "black"
             ]
             []
@@ -112,6 +121,7 @@ piecePath pieceSize (Piece position hooks) =
         , sidePath hooks.west False |> List.map (translate (\( x, y ) -> ( y, 1 - x )))
         ]
         |> List.map (translate (\( x, y ) -> ( x * (toFloat pieceSize), y * (toFloat pieceSize) )))
+        |> List.map (translate (\( x, y ) -> ( toFloat (round x), toFloat (round y) )))
         |> List.map
             (\pathElement ->
                 case pathElement of

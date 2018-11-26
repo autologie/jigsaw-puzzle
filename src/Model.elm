@@ -31,7 +31,7 @@ type alias PieceGroupId =
 
 
 type alias PieceGroup =
-    { pieces : List Piece
+    { pieces : Dict ( Int, Int ) Piece
     , position : ( Int, Int )
     , isSettled : Bool
     , zIndex : Int
