@@ -263,16 +263,19 @@ update msg model =
             let
                 reducePieces piece ( passed, index, seed0 ) =
                     let
-                        ( x, seed1 ) =
+                        ( dX, seed1 ) =
                             Random.step (Random.int 0 ((model.sizeX - 1) * model.pieceSize)) seed0
 
-                        ( y, seed2 ) =
+                        ( dY, seed2 ) =
                             Random.step (Random.int 0 ((model.sizeY - 1) * model.pieceSize)) seed1
+
+                        (Piece { x, y } _) =
+                            piece
                     in
                         ( Dict.insert
                             index
                             { pieces = Dict.singleton ( 0, 0 ) piece
-                            , position = ( x, y )
+                            , position = ( x * 50 + dX // 30, y * 50 + dY // 30 )
                             , isSettled = False
                             , zIndex = 0
                             }
@@ -300,11 +303,16 @@ defaultPosition : Int -> Dict ( Int, Int ) Piece -> ( Int, Int )
 defaultPosition pieceSize pieces =
     let
         ( minX, minY ) =
-            pieces
-                |> Dict.foldl
-                    (\_ (Piece { x, y } _) ( passedX, passedY ) ->
-                        ( min passedX x, min passedY y )
-                    )
+            case pieces |> Dict.values of
+                (Piece headPosition _) :: tail ->
+                    List.foldl
+                        (\(Piece { x, y } _) ( passedX, passedY ) ->
+                            ( min passedX x, min passedY y )
+                        )
+                        ( headPosition.x, headPosition.y )
+                        tail
+
+                _ ->
                     ( 0, 0 )
     in
         ( minX * pieceSize, minY * pieceSize )
@@ -335,12 +343,15 @@ updateGroupsOnDrop model targetGroupId groups =
                         groups
                             |> Dict.partition
                                 (\groupId group ->
-                                    groupId == targetGroupId || isMergeable group targetGroup
+                                    groupId == targetGroupId || isMergeable model.pieceSize group targetGroup
                                 )
 
                     mergeableGroupList =
                         mergeableGroups
                             |> Dict.toList
+
+                    _ =
+                        mergeableGroupList |> List.length
 
                     mergedGroupId =
                         mergeableGroupList
@@ -367,10 +378,10 @@ updateGroupsOnDrop model targetGroupId groups =
                                     (\( _, { position, pieces } ) passed ->
                                         let
                                             groupX =
-                                                (Tuple.first position - mergedGroupX) // model.pieceSize
+                                                round (toFloat (Tuple.first position - mergedGroupX) / toFloat model.pieceSize)
 
                                             groupY =
-                                                (Tuple.second position - mergedGroupY) // model.pieceSize
+                                                round (toFloat (Tuple.second position - mergedGroupY) / toFloat model.pieceSize)
 
                                             updatedPieces =
                                                 pieces
@@ -429,6 +440,56 @@ updateGroupsOnDrop model targetGroupId groups =
             )
 
 
-isMergeable : PieceGroup -> PieceGroup -> Bool
-isMergeable group anotherGroup =
-    False
+isMergeable : Int -> PieceGroup -> PieceGroup -> Bool
+isMergeable pieceSize group anotherGroup =
+    let
+        ( gX, gY ) =
+            group.position
+
+        ( aX, aY ) =
+            anotherGroup.position
+    in
+        group.pieces
+            |> Dict.toList
+            |> List.any
+                (\( ( relX, relY ), Piece { x, y } _ ) ->
+                    let
+                        xx =
+                            gX + relX * pieceSize
+
+                        yy =
+                            gY + relY * pieceSize
+                    in
+                        anotherGroup.pieces
+                            |> Dict.filter
+                                (\( relAX, relAY ) (Piece position _) ->
+                                    let
+                                        aXx =
+                                            aX + relAX * pieceSize
+
+                                        aYy =
+                                            aY + relAY * pieceSize
+                                    in
+                                        case
+                                            ( x - position.x |> String.fromInt
+                                            , y - position.y |> String.fromInt
+                                            )
+                                        of
+                                            ( "0", "1" ) ->
+                                                sqrt (toFloat ((xx - aXx) ^ 2 + (yy - aYy - pieceSize) ^ 2)) < 10
+
+                                            ( "0", "-1" ) ->
+                                                sqrt (toFloat ((xx - aXx) ^ 2 + (yy - aYy + pieceSize) ^ 2)) < 10
+
+                                            ( "1", "0" ) ->
+                                                sqrt (toFloat ((xx - aXx - pieceSize) ^ 2 + (yy - aYy) ^ 2)) < 10
+
+                                            ( "-1", "0" ) ->
+                                                sqrt (toFloat ((xx - aXx + pieceSize) ^ 2 + (yy - aYy) ^ 2)) < 10
+
+                                            _ ->
+                                                False
+                                )
+                            |> Dict.isEmpty
+                            |> not
+                )
