@@ -2,6 +2,10 @@
 
 set -e
 
+rm -rf ./dist
+mkdir -p ./dist
+cp -r ./public/* ./dist/
+
 js="dist/app.js"
 min="dist/app.min.js"
 

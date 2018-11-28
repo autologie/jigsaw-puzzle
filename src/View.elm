@@ -4,56 +4,74 @@ import Json.Decode as Decode exposing (Decoder)
 import Html exposing (Html)
 import Svg exposing (..)
 import Dict
+import Browser
+import Html.Attributes
 import Svg.Attributes exposing (..)
 import Svg.Events exposing (..)
 import Model exposing (..)
 
 
-view : Model -> Html Msg
-view { sizeX, sizeY, pieceSize, groups, dragging } =
-    Html.div []
-        [ svg
-            [ width (String.fromInt (sizeX * pieceSize))
-            , height (String.fromInt (sizeY * pieceSize))
-            , viewBox
-                ([ 0
-                 , 0
-                 , sizeX * pieceSize
-                 , sizeY * pieceSize
-                 ]
-                    |> List.map String.fromInt
-                    |> String.join " "
-                )
-            , Svg.Attributes.style "background: #eee; display: block;"
-            , on "mousemove"
-                (Decode.map
-                    MouseMove
-                    (Decode.map2 (\x y -> ( x, y ))
-                        (Decode.at [ "offsetX" ] Decode.int)
-                        (Decode.at [ "offsetY" ] Decode.int)
+view : Model -> Browser.Document Msg
+view { offset, sizeX, sizeY, pieceSize, groups, dragging } =
+    { title = ""
+    , body =
+        [ Html.div []
+            [ svg
+                [ width "100vw"
+                , height "100vh"
+                , viewBox "0 0 100vw 100vh"
+                , on "mousemove"
+                    (Decode.map
+                        MouseMove
+                        (Decode.map2 (\x y -> ( x, y ))
+                            (Decode.at [ "offsetX" ] Decode.int)
+                            (Decode.at [ "offsetY" ] Decode.int)
+                        )
                     )
-                )
-            ]
-            (groups
-                |> Dict.toList
-                |> List.sortBy
-                    (\( groupId, group ) ->
-                        dragging
-                            |> Maybe.andThen
-                                (\( id, _ ) ->
-                                    if id == groupId then
-                                        Just 1000
-                                    else
-                                        Nothing
+                ]
+                [ g
+                    [ transform
+                        ("translate("
+                            ++ (String.fromInt (Tuple.first offset))
+                            ++ ","
+                            ++ (String.fromInt (Tuple.second offset))
+                            ++ ")"
+                        )
+                    ]
+                    (List.concat
+                        [ [ rect
+                                [ Svg.Attributes.style "fill: #eee;"
+                                , width (String.fromInt (sizeX * pieceSize))
+                                , height (String.fromInt (sizeY * pieceSize))
+                                ]
+                                []
+                          ]
+                        , (groups
+                            |> Dict.toList
+                            |> List.sortBy
+                                (\( groupId, group ) ->
+                                    dragging
+                                        |> Maybe.andThen
+                                            (\( id, _ ) ->
+                                                if id == groupId then
+                                                    Just 1000
+                                                else
+                                                    Nothing
+                                            )
+                                        |> Maybe.withDefault group.zIndex
                                 )
-                            |> Maybe.withDefault group.zIndex
+                            |> List.concatMap (groupViews pieceSize)
+                          )
+                        ]
                     )
-                |> List.concatMap (groupViews pieceSize)
-            )
-        , Html.button [ onClick Scatter ] [ Html.text "Scatter" ]
-        , Html.button [ onClick Reset ] [ Html.text "New Puzzle" ]
-        , Html.span [] [ Html.text ("# of groups: " ++ (String.fromInt (Dict.size groups))) ]
+                ]
+            , Html.div [ Html.Attributes.class "control" ]
+                [ Html.button [ onClick Scatter ] [ Html.text "Scatter" ]
+                , Html.button [ onClick Reset ] [ Html.text "New Puzzle" ]
+                ]
+            ]
         ]
+    }
 
 
 groupViews : Int -> ( PieceGroupId, PieceGroup ) -> List (Svg Msg)

@@ -1,6 +1,7 @@
 module Main exposing (..)
 
 import Browser
+import Browser.Events
 import Dict exposing (Dict)
 import Random exposing (Seed)
 import Model exposing (..)
@@ -8,15 +9,16 @@ import View exposing (view)
 
 
 main =
-    Browser.sandbox
-        { init = initialModel
-        , update = update
+    Browser.document
+        { init = \flag -> ( initialModel flag, Cmd.none )
+        , update = \msg model -> ( update msg model, Cmd.none )
         , view = view
+        , subscriptions = \_ -> Browser.Events.onResize (\x y -> ResizeWindow ( x, y ))
         }
 
 
-initialModel : Model
-initialModel =
+initialModel : ( Int, Int ) -> Model
+initialModel windowSize =
     let
         sizeX =
             15
@@ -30,7 +32,8 @@ initialModel =
         ( groups, seed ) =
             generateGroups sizeX sizeY pieceSize (Random.initialSeed 0)
     in
-        { sizeX = sizeX
+        { offset = offset windowSize ( sizeX, sizeY ) pieceSize
+        , sizeX = sizeX
         , sizeY = sizeY
         , pieceSize = pieceSize
         , groups = groups
@@ -264,10 +267,10 @@ update msg model =
                 reducePieces piece ( passed, index, seed0 ) =
                     let
                         ( x, seed1 ) =
-                            Random.step (Random.int 0 ((model.sizeX - 1) * model.pieceSize)) seed0
+                            Random.step (Random.int (-1 * model.pieceSize) (model.sizeX * model.pieceSize)) seed0
 
                         ( y, seed2 ) =
-                            Random.step (Random.int 0 ((model.sizeY - 1) * model.pieceSize)) seed1
+                            Random.step (Random.int (-1 * model.pieceSize) (model.sizeY * model.pieceSize)) seed1
                     in
                         ( Dict.insert
                             index
@@ -292,8 +295,27 @@ update msg model =
                     , seed = seed
                 }
 
+        ( _, ResizeWindow ( x, y ) ) ->
+            { model
+                | offset = offset ( x, y ) ( model.sizeX, model.sizeY ) model.pieceSize
+            }
+
         _ ->
             model
+
+
+offset : ( Int, Int ) -> ( Int, Int ) -> Int -> ( Int, Int )
+offset windowSize boardSize pieceSize =
+    let
+        ( windowWidth, windowHeight ) =
+            windowSize
+
+        ( sizeX, sizeY ) =
+            boardSize
+    in
+        ( (windowWidth - sizeX * pieceSize) // 2
+        , (windowHeight - sizeY * pieceSize) // 2
+        )
 
 
 defaultPosition : Int -> Dict ( Int, Int ) Piece -> ( Int, Int )
@@ -407,33 +429,14 @@ updateGroupsOnDrop model targetGroupId groups =
         |> Maybe.withDefault groups
         |> Dict.map
             (\groupId group ->
-                if groupId /= targetGroupId then
-                    group
-                else if isCorrectDrop model group then
+                if isCorrectDrop model group then
                     { group
                         | position = defaultPosition model.pieceSize group.pieces
                         , isSettled = True
                         , zIndex = 0
                     }
                 else
-                    let
-                        ( pX, pY ) =
-                            group.position
-
-                        withSnapApplied ( min, max ) position =
-                            if position < min + 10 then
-                                min
-                            else if position > max - 10 then
-                                max
-                            else
-                                position
-                    in
-                        { group
-                            | position =
-                                ( withSnapApplied ( 0, (model.sizeX - 1) * model.pieceSize ) pX
-                                , withSnapApplied ( 0, (model.sizeY - 1) * model.pieceSize ) pY
-                                )
-                        }
+                    group
             )
 
 

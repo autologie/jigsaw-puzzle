@@ -4,7 +4,10 @@
   "description": "",
   "private": true,
   "scripts": {
-    "build": "rm -rf ./dist && mkdir -p ./dist && cp -r ./public/* ./dist/ && ./build.sh"
+    "start": "run-p --print-label dev serve",
+    "dev": "nodemon --ext elm,html --watch ./src --watch ./public --exec './build.sh'",
+    "serve": "http-server -c -1 ./dist",
+    "build": "./build.sh"
   },
   "repository": {
     "type": "git",
@@ -12,7 +15,10 @@
   },
   "homepage": "https://bitbucket.org/sgrinoue/puzzle#readme",
   "devDependencies": {
-    "elm": "^0.19.0-bugfix2"
+    "elm": "^0.19.0-bugfix2",
+    "http-server": "^0.11.1",
+    "nodemon": "^1.18.7",
+    "npm-run-all": "^4.1.5"
   },
   "dependencies": {
     "uglify-js": "^3.4.9"

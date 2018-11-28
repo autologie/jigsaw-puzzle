@@ -39,7 +39,8 @@ type alias PieceGroup =
 
 
 type alias Model =
-    { sizeX : Int
+    { offset : ( Int, Int )
+    , sizeX : Int
     , sizeY : Int
     , pieceSize : Int
     , groups : Dict PieceGroupId PieceGroup
@@ -54,3 +55,4 @@ type Msg
     | MouseMove ( Int, Int )
     | Scatter
     | Reset
+    | ResizeWindow ( Int, Int )
