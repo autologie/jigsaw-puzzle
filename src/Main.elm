@@ -263,19 +263,16 @@ update msg model =
             let
                 reducePieces piece ( passed, index, seed0 ) =
                     let
-                        ( dX, seed1 ) =
+                        ( x, seed1 ) =
                             Random.step (Random.int 0 ((model.sizeX - 1) * model.pieceSize)) seed0
 
-                        ( dY, seed2 ) =
+                        ( y, seed2 ) =
                             Random.step (Random.int 0 ((model.sizeY - 1) * model.pieceSize)) seed1
-
-                        (Piece { x, y } _) =
-                            piece
                     in
                         ( Dict.insert
                             index
                             { pieces = Dict.singleton ( 0, 0 ) piece
-                            , position = ( x * 50 + dX // 30, y * 50 + dY // 30 )
+                            , position = ( x, y )
                             , isSettled = False
                             , zIndex = 0
                             }
