@@ -6,7 +6,7 @@
   "scripts": {
     "start": "run-p --print-label dev serve",
     "dev": "nodemon --ext elm,html --watch ./src --watch ./public --exec './build.sh'",
-    "serve": "http-server -c -1 ./dist",
+    "serve": "http-server -c-1 ./dist",
     "build": "./build.sh"
   },
   "repository": {
