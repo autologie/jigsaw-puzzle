@@ -77,16 +77,44 @@ view { offset, sizeX, sizeY, pieceSize, groups, dragging } =
 groupViews : Int -> ( PieceGroupId, PieceGroup ) -> List (Svg Msg)
 groupViews pieceSize ( groupId, group ) =
     let
-        ( x, y ) =
+        ( gX, gY ) =
             group.position
+
+        exists ( pX, pY ) =
+            group.pieces
+                |> Dict.values
+                |> List.any (\(Piece position _) -> position == { x = pX, y = pY })
     in
         group.pieces
-            |> Dict.map (pieceView x y pieceSize groupId)
+            |> Dict.map
+                (\( x, y ) piece ->
+                    pieceView
+                        gX
+                        gY
+                        pieceSize
+                        groupId
+                        ( x, y )
+                        { north = exists ( x, y - 1 )
+                        , east = exists ( x + 1, y )
+                        , south = exists ( x, y + 1 )
+                        , west = exists ( x - 1, y )
+                        }
+                        piece
+                )
             |> Dict.values
 
 
-pieceView : Int -> Int -> Int -> PieceGroupId -> ( Int, Int ) -> Piece -> Svg Msg
-pieceView groupX groupY pieceSize groupId ( x, y ) piece =
+pieceView :
+    Int
+    -> Int
+    -> Int
+    -> PieceGroupId
+    -> ( Int, Int )
+    -> { north : Bool, east : Bool, south : Bool, west : Bool }
+    -> Piece
+    -> Svg Msg
+pieceView groupX groupY pieceSize groupId ( x, y ) { north, east, south, west } piece =
+    -- TODO: draw connected sides with lighter color
     g
         [ transform
             ("translate("

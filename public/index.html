@@ -13,9 +13,25 @@ html,body {
   bottom: 0;
   left: 0;
   padding: 1em;
+  width: 100%;
+  text-align: center;
 }
 .control button:not(:last-child) {
   margin-right: 1em;
+}
+.control button {
+  font-size: 1.5em;
+  font-family: futura;
+  border-radius: 1em;
+  padding: .2em 1em;
+  color: red;
+  border: 3px solid #ccc;
+  outline: none;
+  transition: transform .5s ease;
+}
+.control button:hover {
+  transform: scale(1.1);
+  cursor: pointer;
 }
   </style>
 </head>
