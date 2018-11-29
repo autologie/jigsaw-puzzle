@@ -8,6 +8,7 @@ import Browser
 import Html.Attributes
 import Svg.Attributes exposing (..)
 import Svg.Events exposing (..)
+import Svg.Lazy as Lazy
 import Model exposing (..)
 
 
@@ -87,18 +88,14 @@ groupViews pieceSize ( groupId, group ) =
     in
         group.pieces
             |> Dict.map
-                (\( x, y ) piece ->
-                    pieceView
+                (\position piece ->
+                    Lazy.lazy6
+                        pieceView
                         gX
                         gY
                         pieceSize
                         groupId
-                        ( x, y )
-                        { north = exists ( x, y - 1 )
-                        , east = exists ( x + 1, y )
-                        , south = exists ( x, y + 1 )
-                        , west = exists ( x - 1, y )
-                        }
+                        position
                         piece
                 )
             |> Dict.values
@@ -110,10 +107,9 @@ pieceView :
     -> Int
     -> PieceGroupId
     -> ( Int, Int )
-    -> { north : Bool, east : Bool, south : Bool, west : Bool }
     -> Piece
     -> Svg Msg
-pieceView groupX groupY pieceSize groupId ( x, y ) { north, east, south, west } piece =
+pieceView groupX groupY pieceSize groupId ( x, y ) piece =
     -- TODO: draw connected sides with lighter color
     g
         [ transform
