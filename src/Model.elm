@@ -5,11 +5,11 @@ import Dict exposing (Dict)
 
 
 type Piece
-    = Piece Position Hooks
+    = Piece Point Hooks
 
 
-type alias Position =
-    { x : Int, y : Int }
+type alias Point =
+    ( Int, Int )
 
 
 type alias Hooks =
@@ -31,32 +31,32 @@ type alias PieceGroupId =
 
 
 type alias PieceGroup =
-    { pieces : Dict ( Int, Int ) Piece
-    , position : ( Int, Int )
+    { pieces : Dict Point Piece
+    , position : Point
     , isSettled : Bool
     , zIndex : Int
     }
 
 
 type alias Model =
-    { offset : ( Int, Int )
+    { offset : Point
     , sizeX : Int
     , sizeY : Int
     , pieceSize : Int
     , groups : Dict PieceGroupId PieceGroup
-    , dragging : Maybe ( PieceGroupId, ( Int, Int ) )
+    , dragging : Maybe ( PieceGroupId, Point )
     , seed : Random.Seed
-    , selection : Maybe ( ( Int, Int ), ( Int, Int ) )
+    , selection : Maybe ( Point, Point )
     , selectedGroups : List PieceGroupId
     }
 
 
 type Msg
-    = StartDragging PieceGroupId ( Int, Int )
+    = StartDragging PieceGroupId Point
     | EndDragging
-    | MouseMove ( Int, Int )
+    | MouseMove Point
     | Scatter
     | Reset
-    | ResizeWindow ( Int, Int )
-    | StartSelection ( Int, Int )
+    | ResizeWindow Point
+    | StartSelection Point
     | EndSelection

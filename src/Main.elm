@@ -49,26 +49,26 @@ generateGroups sizeX sizeY pieceSize seed =
     let
         plain =
             plainPieces sizeX sizeY
-                |> List.map (\((Piece { x, y } _) as piece) -> ( ( x, y ), piece ))
+                |> List.map (\((Piece point _) as piece) -> ( point, piece ))
                 |> Dict.fromList
 
-        trimX position hooks =
-            if position.x == 0 then
+        trimX x hooks =
+            if x == 0 then
                 { hooks | west = None }
-            else if position.x == sizeX - 1 then
+            else if x == sizeX - 1 then
                 { hooks | east = None }
             else
                 hooks
 
-        trimY position hooks =
-            if position.y == 0 then
+        trimY y hooks =
+            if y == 0 then
                 { hooks | north = None }
-            else if position.y == sizeY - 1 then
+            else if y == sizeY - 1 then
                 { hooks | south = None }
             else
                 hooks
 
-        reducePieces _ (Piece position hooks) ( pieces, mySeed ) =
+        reducePieces _ (Piece (( pieceX, pieceY ) as position) hooks) ( pieces, mySeed ) =
             let
                 ( generatedHooks, updatedSeed ) =
                     generateHooks mySeed
@@ -76,8 +76,8 @@ generateGroups sizeX sizeY pieceSize seed =
                 ( withHooksAssigned
                     position
                     (generatedHooks
-                        |> trimX position
-                        |> trimY position
+                        |> trimX pieceX
+                        |> trimY pieceY
                     )
                     pieces
                 , updatedSeed
@@ -105,9 +105,7 @@ plainPieces sizeX sizeY =
                     |> List.map
                         (\y ->
                             Piece
-                                { x = x
-                                , y = y
-                                }
+                                ( x, y )
                                 { north = None
                                 , east = None
                                 , south = None
@@ -168,12 +166,12 @@ generateHooks seed0 =
         )
 
 
-withHooksAssigned : Position -> Hooks -> Dict ( Int, Int ) Piece -> Dict ( Int, Int ) Piece
-withHooksAssigned { x, y } { north, east, south, west } pieces =
+withHooksAssigned : Point -> Hooks -> Dict Point Piece -> Dict Point Piece
+withHooksAssigned ( x, y ) { north, east, south, west } pieces =
     let
-        distanceTo position =
-            ( x - position.x |> String.fromInt
-            , y - position.y |> String.fromInt
+        distanceTo ( pX, pY ) =
+            ( x - pX |> String.fromInt
+            , y - pY |> String.fromInt
             )
 
         assignHooks =
@@ -408,7 +406,7 @@ update msg model =
             model
 
 
-offset : ( Int, Int ) -> ( Int, Int ) -> Int -> ( Int, Int )
+offset : Point -> Point -> Int -> Point
 offset windowSize boardSize pieceSize =
     let
         ( windowWidth, windowHeight ) =
@@ -422,17 +420,17 @@ offset windowSize boardSize pieceSize =
         )
 
 
-defaultPosition : Int -> Dict ( Int, Int ) Piece -> ( Int, Int )
+defaultPosition : Int -> Dict Point Piece -> Point
 defaultPosition pieceSize pieces =
     let
         ( minX, minY ) =
             case pieces |> Dict.values of
                 (Piece headPosition _) :: tail ->
                     List.foldl
-                        (\(Piece { x, y } _) ( passedX, passedY ) ->
+                        (\(Piece ( x, y ) _) ( passedX, passedY ) ->
                             ( min passedX x, min passedY y )
                         )
-                        ( headPosition.x, headPosition.y )
+                        headPosition
                         tail
 
                 _ ->
@@ -556,7 +554,7 @@ isMergeable pieceSize group anotherGroup =
         group.pieces
             |> Dict.toList
             |> List.any
-                (\( ( relX, relY ), Piece { x, y } _ ) ->
+                (\( ( relX, relY ), Piece ( x, y ) _ ) ->
                     let
                         xx =
                             gX + relX * pieceSize
@@ -566,7 +564,7 @@ isMergeable pieceSize group anotherGroup =
                     in
                         anotherGroup.pieces
                             |> Dict.filter
-                                (\( relAX, relAY ) (Piece position _) ->
+                                (\( relAX, relAY ) (Piece ( pX, pY ) _) ->
                                     let
                                         aXx =
                                             aX + relAX * pieceSize
@@ -575,8 +573,8 @@ isMergeable pieceSize group anotherGroup =
                                             aY + relAY * pieceSize
                                     in
                                         case
-                                            ( x - position.x |> String.fromInt
-                                            , y - position.y |> String.fromInt
+                                            ( x - pX |> String.fromInt
+                                            , y - pY |> String.fromInt
                                             )
                                         of
                                             ( "0", "1" ) ->

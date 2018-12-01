@@ -90,7 +90,7 @@ groupViews pieceSize isSelected ( groupId, group ) =
         exists ( pX, pY ) =
             group.pieces
                 |> Dict.values
-                |> List.any (\(Piece position _) -> position == { x = pX, y = pY })
+                |> List.any (\(Piece position _) -> position == ( pX, pY ))
     in
         group.pieces
             |> Dict.map
