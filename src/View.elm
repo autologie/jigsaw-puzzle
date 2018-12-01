@@ -13,7 +13,7 @@ import Model exposing (..)
 
 
 view : Model -> Browser.Document Msg
-view { offset, sizeX, sizeY, pieceSize, groups, dragging } =
+view { offset, sizeX, sizeY, pieceSize, groups, dragging, selectedGroups } =
     { title = ""
     , body =
         [ Html.div []
@@ -21,14 +21,9 @@ view { offset, sizeX, sizeY, pieceSize, groups, dragging } =
                 [ width "100vw"
                 , height "100vh"
                 , viewBox "0 0 100vw 100vh"
-                , on "mousemove"
-                    (Decode.map
-                        MouseMove
-                        (Decode.map2 (\x y -> ( x, y ))
-                            (Decode.at [ "offsetX" ] Decode.int)
-                            (Decode.at [ "offsetY" ] Decode.int)
-                        )
-                    )
+                , on "mousemove" (Decode.map MouseMove decodeMouseEvent)
+                , on "mousedown" (Decode.map (\position -> StartSelection position) decodeMouseEvent)
+                , on "mouseup" (Decode.succeed EndSelection)
                 ]
                 [ g
                     [ transform
@@ -54,14 +49,25 @@ view { offset, sizeX, sizeY, pieceSize, groups, dragging } =
                                     dragging
                                         |> Maybe.andThen
                                             (\( id, _ ) ->
-                                                if id == groupId then
+                                                if
+                                                    (id == groupId)
+                                                        || (List.member id selectedGroups
+                                                                && List.member groupId selectedGroups
+                                                           )
+                                                then
                                                     Just 1000
                                                 else
                                                     Nothing
                                             )
                                         |> Maybe.withDefault group.zIndex
                                 )
-                            |> List.concatMap (groupViews pieceSize)
+                            |> List.concatMap
+                                (\( groupId, group ) ->
+                                    groupViews
+                                        pieceSize
+                                        (List.member groupId selectedGroups)
+                                        ( groupId, group )
+                                )
                           )
                         ]
                     )
@@ -75,8 +81,8 @@ view { offset, sizeX, sizeY, pieceSize, groups, dragging } =
     }
 
 
-groupViews : Int -> ( PieceGroupId, PieceGroup ) -> List (Svg Msg)
-groupViews pieceSize ( groupId, group ) =
+groupViews : Int -> Bool -> ( PieceGroupId, PieceGroup ) -> List (Svg Msg)
+groupViews pieceSize isSelected ( groupId, group ) =
     let
         ( gX, gY ) =
             group.position
@@ -89,13 +95,14 @@ groupViews pieceSize ( groupId, group ) =
         group.pieces
             |> Dict.map
                 (\position piece ->
-                    Lazy.lazy6
+                    Lazy.lazy7
                         pieceView
                         gX
                         gY
                         pieceSize
                         groupId
                         position
+                        isSelected
                         piece
                 )
             |> Dict.values
@@ -107,9 +114,10 @@ pieceView :
     -> Int
     -> PieceGroupId
     -> ( Int, Int )
+    -> Bool
     -> Piece
     -> Svg Msg
-pieceView groupX groupY pieceSize groupId ( x, y ) piece =
+pieceView groupX groupY pieceSize groupId ( x, y ) isSelected piece =
     -- TODO: draw connected sides with lighter color
     g
         [ transform
@@ -123,14 +131,16 @@ pieceView groupX groupY pieceSize groupId ( x, y ) piece =
         [ Svg.path
             [ d (piecePath pieceSize piece)
             , stroke "red"
-            , fill "white"
+            , fill
+                (if isSelected then
+                    "#fdd"
+                 else
+                    "white"
+                )
             , on "mousedown"
                 (Decode.map
-                    (\position -> StartDragging groupId position)
-                    (Decode.map2 (\eventX eventY -> ( eventX - groupX, eventY - groupY ))
-                        (Decode.at [ "offsetX" ] Decode.int)
-                        (Decode.at [ "offsetY" ] Decode.int)
-                    )
+                    (\( eventX, eventY ) -> StartDragging groupId ( eventX - groupX, eventY - groupY ))
+                    decodeMouseEvent
                 )
             , onMouseUp EndDragging
             ]
@@ -142,6 +152,12 @@ pieceView groupX groupY pieceSize groupId ( x, y ) piece =
             ]
             []
         ]
+
+
+decodeMouseEvent =
+    Decode.map2 (\eventX eventY -> ( eventX, eventY ))
+        (Decode.at [ "offsetX" ] Decode.int)
+        (Decode.at [ "offsetY" ] Decode.int)
 
 
 type PathElement

@@ -39,6 +39,8 @@ initialModel windowSize =
         , groups = groups
         , dragging = Nothing
         , seed = seed
+        , selection = Nothing
+        , selectedGroups = []
         }
 
 
@@ -229,23 +231,125 @@ update msg model =
                         |> Dict.map (\_ group -> { group | isSettled = False })
             }
 
+        ( Nothing, StartSelection ( touchX, touchY ) ) ->
+            let
+                ( offsetX, offsetY ) =
+                    model.offset
+
+                selectPosition =
+                    ( touchX - offsetX, touchY - offsetY )
+            in
+                { model
+                    | selection = Just ( selectPosition, selectPosition )
+                }
+
         ( Just ( targetGroupId, _ ), EndDragging ) ->
             { model
                 | dragging = Nothing
                 , groups =
                     model.groups
                         |> updateGroupsOnDrop model targetGroupId
+                , selectedGroups = []
             }
 
-        ( Just ( draggingGroupId, ( touchX, touchY ) ), MouseMove ( x, y ) ) ->
+        ( Nothing, MouseMove ( x, y ) ) ->
             let
-                updatePosition groupId group =
-                    if groupId == draggingGroupId then
-                        { group | position = ( x - touchX, y - touchY ) }
-                    else
-                        group
+                ( offsetX, offsetY ) =
+                    model.offset
             in
-                { model | groups = model.groups |> Dict.map updatePosition }
+                { model
+                    | selection =
+                        model.selection
+                            |> Maybe.map (\( position, _ ) -> ( position, ( x - offsetX, y - offsetY ) ))
+                }
+
+        ( Just ( draggingGroupId, ( touchX, touchY ) ), MouseMove ( x, y ) ) ->
+            case Dict.get draggingGroupId model.groups of
+                Just { position } ->
+                    let
+                        ( draggingGroupX, draggingGroupY ) =
+                            position
+
+                        isDraggingSelectedGroup =
+                            List.member draggingGroupId model.selectedGroups
+
+                        updatePosition groupId group =
+                            if groupId == draggingGroupId then
+                                { group | position = ( x - touchX, y - touchY ) }
+                            else if isDraggingSelectedGroup && List.member groupId model.selectedGroups then
+                                let
+                                    ( groupX, groupY ) =
+                                        group.position
+
+                                    ( diffX, diffY ) =
+                                        ( groupX - draggingGroupX, groupY - draggingGroupY )
+                                in
+                                    { group | position = ( x - touchX + diffX, y - touchY + diffY ) }
+                            else
+                                group
+                    in
+                        { model | groups = model.groups |> Dict.map updatePosition }
+
+                Nothing ->
+                    model
+
+        ( Nothing, EndSelection ) ->
+            case model.selection of
+                Just ( ( fromX, fromY ), ( toX, toY ) ) ->
+                    let
+                        minSelectionX =
+                            min fromX toX
+
+                        maxSelectionX =
+                            max fromX toX
+
+                        minSelectionY =
+                            min fromY toY
+
+                        maxSelectionY =
+                            max fromY toY
+                    in
+                        { model
+                            | selection = Nothing
+                            , selectedGroups =
+                                model.groups
+                                    |> Dict.toList
+                                    |> List.filter
+                                        (\( _, { pieces, position } ) ->
+                                            let
+                                                ( minGroupX, minGroupY ) =
+                                                    position
+
+                                                maxGroupX =
+                                                    minGroupX
+                                                        + model.pieceSize
+                                                        * (pieces
+                                                            |> Dict.keys
+                                                            |> List.map Tuple.first
+                                                            |> List.maximum
+                                                            |> Maybe.withDefault 0
+                                                          )
+
+                                                maxGroupY =
+                                                    minGroupY
+                                                        + model.pieceSize
+                                                        * (pieces
+                                                            |> Dict.keys
+                                                            |> List.map Tuple.second
+                                                            |> List.maximum
+                                                            |> Maybe.withDefault 0
+                                                          )
+                                            in
+                                                (maxSelectionX > minGroupX)
+                                                    && (minSelectionX < maxGroupX)
+                                                    && (maxSelectionY > minGroupY)
+                                                    && (minSelectionY < maxGroupY)
+                                        )
+                                    |> List.map (\( groupId, _ ) -> groupId)
+                        }
+
+                Nothing ->
+                    model
 
         ( _, Reset ) ->
             let

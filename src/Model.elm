@@ -46,6 +46,8 @@ type alias Model =
     , groups : Dict PieceGroupId PieceGroup
     , dragging : Maybe ( PieceGroupId, ( Int, Int ) )
     , seed : Random.Seed
+    , selection : Maybe ( ( Int, Int ), ( Int, Int ) )
+    , selectedGroups : List PieceGroupId
     }
 
 
@@ -56,3 +58,5 @@ type Msg
     | Scatter
     | Reset
     | ResizeWindow ( Int, Int )
+    | StartSelection ( Int, Int )
+    | EndSelection
