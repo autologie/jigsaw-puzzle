@@ -2,14 +2,11 @@ module Model exposing (..)
 
 import Random
 import Dict exposing (Dict)
+import Point exposing (Point)
 
 
 type Piece
     = Piece Point Hooks
-
-
-type alias Point =
-    ( Int, Int )
 
 
 type alias Hooks =

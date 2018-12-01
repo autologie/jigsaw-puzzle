@@ -6,6 +6,7 @@ import Dict exposing (Dict)
 import Random exposing (Seed)
 import Model exposing (..)
 import View exposing (view)
+import Point exposing (Point)
 
 
 main =
@@ -167,35 +168,35 @@ generateHooks seed0 =
 
 
 withHooksAssigned : Point -> Hooks -> Dict Point Piece -> Dict Point Piece
-withHooksAssigned ( x, y ) { north, east, south, west } pieces =
+withHooksAssigned targetPosition { north, east, south, west } pieces =
     let
-        distanceTo ( pX, pY ) =
-            ( x - pX |> String.fromInt
-            , y - pY |> String.fromInt
-            )
-
         assignHooks =
             \_ (Piece position hooks) ->
                 let
                     updatedHooks =
-                        case distanceTo position of
-                            ( "0", "0" ) ->
+                        case
+                            (targetPosition
+                                |> Point.sub position
+                                |> Point.toString
+                            )
+                        of
+                            "(0,0)" ->
                                 { north = north
                                 , east = east
                                 , south = south
                                 , west = west
                                 }
 
-                            ( "-1", "0" ) ->
+                            "(-1,0)" ->
                                 { hooks | west = negate east }
 
-                            ( "1", "0" ) ->
+                            "(1,0)" ->
                                 { hooks | east = negate west }
 
-                            ( "0", "-1" ) ->
+                            "(0,-1)" ->
                                 { hooks | north = negate south }
 
-                            ( "0", "1" ) ->
+                            "(0,1)" ->
                                 { hooks | south = negate north }
 
                             _ ->
@@ -229,13 +230,10 @@ update msg model =
                         |> Dict.map (\_ group -> { group | isSettled = False })
             }
 
-        ( Nothing, StartSelection ( touchX, touchY ) ) ->
+        ( Nothing, StartSelection touchPosition ) ->
             let
-                ( offsetX, offsetY ) =
-                    model.offset
-
                 selectPosition =
-                    ( touchX - offsetX, touchY - offsetY )
+                    touchPosition |> Point.sub model.offset
             in
                 { model
                     | selection = Just ( selectPosition, selectPosition )
@@ -250,43 +248,51 @@ update msg model =
                 , selectedGroups = []
             }
 
-        ( Nothing, MouseMove ( x, y ) ) ->
-            let
-                ( offsetX, offsetY ) =
-                    model.offset
-            in
-                { model
-                    | selection =
-                        model.selection
-                            |> Maybe.map (\( position, _ ) -> ( position, ( x - offsetX, y - offsetY ) ))
-                }
+        ( Nothing, MouseMove mousePosition ) ->
+            { model
+                | selection =
+                    model.selection
+                        |> Maybe.map
+                            (\( position, _ ) ->
+                                ( position
+                                , mousePosition |> Point.sub model.offset
+                                )
+                            )
+            }
 
-        ( Just ( draggingGroupId, ( touchX, touchY ) ), MouseMove ( x, y ) ) ->
+        ( Just ( draggingGroupId, touchPosition ), MouseMove mousePosition ) ->
             case Dict.get draggingGroupId model.groups of
                 Just { position } ->
                     let
-                        ( draggingGroupX, draggingGroupY ) =
-                            position
+                        offsetPosition =
+                            Point.origin
+                                |> Point.add touchPosition
+                                |> Point.sub mousePosition
+                                |> Point.add position
 
                         isDraggingSelectedGroup =
                             List.member draggingGroupId model.selectedGroups
 
                         updatePosition groupId group =
-                            if groupId == draggingGroupId then
-                                { group | position = ( x - touchX, y - touchY ) }
-                            else if isDraggingSelectedGroup && List.member groupId model.selectedGroups then
-                                let
-                                    ( groupX, groupY ) =
+                            if
+                                (groupId == draggingGroupId)
+                                    || (isDraggingSelectedGroup
+                                            && List.member groupId model.selectedGroups
+                                       )
+                            then
+                                { group
+                                    | position =
                                         group.position
-
-                                    ( diffX, diffY ) =
-                                        ( groupX - draggingGroupX, groupY - draggingGroupY )
-                                in
-                                    { group | position = ( x - touchX + diffX, y - touchY + diffY ) }
+                                            |> Point.sub offsetPosition
+                                }
                             else
                                 group
                     in
-                        { model | groups = model.groups |> Dict.map updatePosition }
+                        { model
+                            | groups =
+                                model.groups
+                                    |> Dict.map updatePosition
+                        }
 
                 Nothing ->
                     model
@@ -376,7 +382,7 @@ update msg model =
                     in
                         ( Dict.insert
                             index
-                            { pieces = Dict.singleton ( 0, 0 ) piece
+                            { pieces = Dict.singleton Point.origin piece
                             , position = ( x, y )
                             , isSettled = False
                             , zIndex = 0
@@ -408,50 +414,35 @@ update msg model =
 
 offset : Point -> Point -> Int -> Point
 offset windowSize boardSize pieceSize =
-    let
-        ( windowWidth, windowHeight ) =
-            windowSize
-
-        ( sizeX, sizeY ) =
-            boardSize
-    in
-        ( (windowWidth - sizeX * pieceSize) // 2
-        , (windowHeight - sizeY * pieceSize) // 2
-        )
+    windowSize
+        |> Point.sub (boardSize |> Point.scale pieceSize)
+        |> Point.divide 2
 
 
 defaultPosition : Int -> Dict Point Piece -> Point
 defaultPosition pieceSize pieces =
     let
-        ( minX, minY ) =
+        minPosition =
             case pieces |> Dict.values of
                 (Piece headPosition _) :: tail ->
                     List.foldl
-                        (\(Piece ( x, y ) _) ( passedX, passedY ) ->
-                            ( min passedX x, min passedY y )
-                        )
+                        (\(Piece position _) passed -> Point.min position passed)
                         headPosition
                         tail
 
                 _ ->
-                    ( 0, 0 )
+                    Point.origin
     in
-        ( minX * pieceSize, minY * pieceSize )
+        minPosition |> Point.scale pieceSize
 
 
 isCorrectDrop : Model -> PieceGroup -> Bool
 isCorrectDrop { pieceSize } group =
-    let
-        ( actualX, actualY ) =
-            group.position
-
-        ( defaultX, defaultY ) =
-            defaultPosition pieceSize group.pieces
-
-        distance =
-            sqrt (toFloat (defaultX - actualX) ^ 2 + toFloat (defaultY - actualY) ^ 2)
-    in
-        distance < 10
+    (Point.distance
+        group.position
+        (defaultPosition pieceSize group.pieces)
+    )
+        < 10
 
 
 updateGroupsOnDrop : Model -> PieceGroupId -> Dict PieceGroupId PieceGroup -> Dict PieceGroupId PieceGroup
@@ -498,16 +489,21 @@ updateGroupsOnDrop model targetGroupId groups =
                                 |> List.foldl
                                     (\( _, { position, pieces } ) passed ->
                                         let
-                                            groupX =
-                                                round (toFloat (Tuple.first position - mergedGroupX) / toFloat model.pieceSize)
-
-                                            groupY =
-                                                round (toFloat (Tuple.second position - mergedGroupY) / toFloat model.pieceSize)
+                                            groupPosition =
+                                                position
+                                                    |> Point.sub ( mergedGroupX, mergedGroupY )
+                                                    |> Point.divideRound model.pieceSize
 
                                             updatedPieces =
                                                 pieces
                                                     |> Dict.toList
-                                                    |> List.map (\( ( x, y ), piece ) -> ( ( x + groupX, y + groupY ), piece ))
+                                                    |> List.map
+                                                        (\( piecePosition, piece ) ->
+                                                            ( piecePosition
+                                                                |> Point.add groupPosition
+                                                            , piece
+                                                            )
+                                                        )
                                                     |> Dict.fromList
                                         in
                                             Dict.union passed updatedPieces
@@ -544,54 +540,46 @@ updateGroupsOnDrop model targetGroupId groups =
 
 isMergeable : Int -> PieceGroup -> PieceGroup -> Bool
 isMergeable pieceSize group anotherGroup =
-    let
-        ( gX, gY ) =
-            group.position
+    group.pieces
+        |> Dict.toList
+        |> List.any
+            (\( pieceOffset, Piece piecePosition _ ) ->
+                let
+                    position =
+                        pieceOffset
+                            |> Point.scale pieceSize
+                            |> Point.add group.position
+                in
+                    anotherGroup.pieces
+                        |> Dict.filter
+                            (\anotherPieceOffset (Piece anotherPiecePosition _) ->
+                                let
+                                    anotherPosition =
+                                        anotherPieceOffset
+                                            |> Point.scale pieceSize
+                                            |> Point.add anotherGroup.position
+                                in
+                                    case
+                                        (piecePosition
+                                            |> Point.sub anotherPiecePosition
+                                            |> Point.toString
+                                        )
+                                    of
+                                        "(0,1)" ->
+                                            Point.distance position (Point.add anotherPosition ( 0, pieceSize )) < 10
 
-        ( aX, aY ) =
-            anotherGroup.position
-    in
-        group.pieces
-            |> Dict.toList
-            |> List.any
-                (\( ( relX, relY ), Piece ( x, y ) _ ) ->
-                    let
-                        xx =
-                            gX + relX * pieceSize
+                                        "(0,-1)" ->
+                                            Point.distance position (Point.add anotherPosition ( 0, -pieceSize )) < 10
 
-                        yy =
-                            gY + relY * pieceSize
-                    in
-                        anotherGroup.pieces
-                            |> Dict.filter
-                                (\( relAX, relAY ) (Piece ( pX, pY ) _) ->
-                                    let
-                                        aXx =
-                                            aX + relAX * pieceSize
+                                        "(1,0)" ->
+                                            Point.distance position (Point.add anotherPosition ( pieceSize, 0 )) < 10
 
-                                        aYy =
-                                            aY + relAY * pieceSize
-                                    in
-                                        case
-                                            ( x - pX |> String.fromInt
-                                            , y - pY |> String.fromInt
-                                            )
-                                        of
-                                            ( "0", "1" ) ->
-                                                sqrt (toFloat ((xx - aXx) ^ 2 + (yy - aYy - pieceSize) ^ 2)) < 10
+                                        "(-1,0)" ->
+                                            Point.distance position (Point.add anotherPosition ( -pieceSize, 0 )) < 10
 
-                                            ( "0", "-1" ) ->
-                                                sqrt (toFloat ((xx - aXx) ^ 2 + (yy - aYy + pieceSize) ^ 2)) < 10
-
-                                            ( "1", "0" ) ->
-                                                sqrt (toFloat ((xx - aXx - pieceSize) ^ 2 + (yy - aYy) ^ 2)) < 10
-
-                                            ( "-1", "0" ) ->
-                                                sqrt (toFloat ((xx - aXx + pieceSize) ^ 2 + (yy - aYy) ^ 2)) < 10
-
-                                            _ ->
-                                                False
-                                )
-                            |> Dict.isEmpty
-                            |> not
-                )
+                                        _ ->
+                                            False
+                            )
+                        |> Dict.isEmpty
+                        |> not
+            )

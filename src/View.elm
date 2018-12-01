@@ -10,6 +10,7 @@ import Svg.Attributes exposing (..)
 import Svg.Events exposing (..)
 import Svg.Lazy as Lazy
 import Model exposing (..)
+import Point exposing (Point)
 
 
 view : Model -> Browser.Document Msg
@@ -113,7 +114,7 @@ pieceView :
     -> Int
     -> Int
     -> PieceGroupId
-    -> ( Int, Int )
+    -> Point
     -> Bool
     -> Piece
     -> Svg Msg
@@ -161,12 +162,12 @@ decodeMouseEvent =
 
 
 type PathElement
-    = M Point
-    | C Point Point Point
-    | L Point
+    = M PathStop
+    | C PathStop PathStop PathStop
+    | L PathStop
 
 
-type alias Point =
+type alias PathStop =
     ( Float, Float )
 
 
@@ -245,7 +246,7 @@ sidePath hook isInitial =
                     |> List.map (translate (\( x, y ) -> ( x, -y )))
 
 
-translate : (Point -> Point) -> PathElement -> PathElement
+translate : (PathStop -> PathStop) -> PathElement -> PathElement
 translate fn pathElement =
     case pathElement of
         M p ->
