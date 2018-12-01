@@ -7,7 +7,7 @@
     "start": "run-p --print-label dev serve",
     "dev": "nodemon --ext elm,html --watch ./src --watch ./public --exec './build.sh'",
     "serve": "http-server -c-1 ./dist",
-    "build": "./build.sh"
+    "build": "PROD=true ./build.sh"
   },
   "repository": {
     "type": "git",
