@@ -108,13 +108,7 @@ view { offset, sizeX, sizeY, pieceSize, groups, dragging, selectedGroups } =
                 , (groups
                     |> Dict.toList
                     |> List.sortBy (groupZIndex dragging selectedGroups)
-                    |> List.map
-                        (\( groupId, group ) ->
-                            groupView
-                                pieceSize
-                                (List.member groupId selectedGroups)
-                                ( groupId, group )
-                        )
+                    |> List.map (Lazy.lazy3 groupView pieceSize selectedGroups)
                   )
                 ]
             )
@@ -138,9 +132,12 @@ groupZIndex dragging selectedGroups ( groupId, group ) =
         |> Maybe.withDefault group.zIndex
 
 
-groupView : Int -> Bool -> ( PieceGroupId, PieceGroup ) -> Svg Msg
-groupView pieceSize isSelected ( groupId, group ) =
+groupView : Int -> List PieceGroupId -> ( PieceGroupId, PieceGroup ) -> Svg Msg
+groupView pieceSize selectedGroups ( groupId, group ) =
     let
+        isSelected =
+            List.member groupId selectedGroups
+
         exists ( pX, pY ) =
             group.pieces
                 |> Dict.values
@@ -160,18 +157,9 @@ groupView pieceSize isSelected ( groupId, group ) =
         g
             [ transform ("translate" ++ (Point.toString group.position)) ]
             (group.pieces
-                |> Dict.map
-                    (\position piece ->
-                        (Lazy.lazy4
-                            Piece.view
-                            pieceSize
-                            position
-                            isSelected
-                            piece
-                        )
-                            |> Svg.map toMsg
-                    )
+                |> Dict.map (Lazy.lazy4 Piece.view pieceSize isSelected)
                 |> Dict.values
+                |> List.map (Html.map toMsg)
             )
 
 

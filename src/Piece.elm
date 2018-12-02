@@ -16,11 +16,11 @@ type Msg
 
 view :
     Int
-    -> Point
     -> Bool
+    -> Point
     -> Piece
     -> Svg Msg
-view pieceSize position isSelected piece =
+view pieceSize isSelected position piece =
     -- TODO: draw connected sides with lighter color
     g
         [ transform
