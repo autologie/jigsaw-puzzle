@@ -7,7 +7,7 @@ import Random exposing (Seed)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events exposing (..)
-import GamePlay
+import Board
 import Point exposing (Point)
 import JigsawPuzzle exposing (Piece(..))
 
@@ -16,13 +16,13 @@ type Msg
     = Scatter
     | Reset
     | ResizeWindow Point
-    | GamePlayMsg GamePlay.Msg
+    | BoardMsg Board.Msg
 
 
 type alias Model =
     { windowSize : Point
     , seed : Random.Seed
-    , gamePlayModel : GamePlay.Model
+    , gamePlayModel : Board.Model
     }
 
 
@@ -39,7 +39,7 @@ initialModel : ( Int, Int ) -> Model
 initialModel windowSize =
     let
         ( gamePlayModel, seed ) =
-            GamePlay.initialModel
+            Board.initialModel
                 windowSize
                 (Random.initialSeed 0)
     in
@@ -54,7 +54,7 @@ view model =
     { title = ""
     , body =
         [ Html.div []
-            [ GamePlay.view model.gamePlayModel |> Html.map GamePlayMsg
+            [ Board.view model.gamePlayModel |> Html.map BoardMsg
             , Html.div [ Html.Attributes.class "control" ]
                 [ Html.button [ onClick Scatter ] [ Html.text "Scatter" ]
                 , Html.button [ onClick Reset ] [ Html.text "New Puzzle" ]
@@ -67,15 +67,15 @@ view model =
 update : Msg -> Model -> Model
 update msg model =
     case msg of
-        GamePlayMsg gamePlayMsg ->
+        BoardMsg gamePlayMsg ->
             { model
-                | gamePlayModel = GamePlay.update gamePlayMsg model.gamePlayModel
+                | gamePlayModel = Board.update gamePlayMsg model.gamePlayModel
             }
 
         Reset ->
             let
                 ( gamePlayModel, seed ) =
-                    GamePlay.initialModel
+                    Board.initialModel
                         model.windowSize
                         model.seed
             in
@@ -87,7 +87,7 @@ update msg model =
         Scatter ->
             let
                 ( gamePlayModel, seed ) =
-                    model.gamePlayModel |> GamePlay.scatterPieces model.seed
+                    model.gamePlayModel |> Board.scatterPieces model.seed
             in
                 { model
                     | seed = seed
@@ -97,7 +97,7 @@ update msg model =
         ResizeWindow size ->
             let
                 gamePlayModel =
-                    model.gamePlayModel |> GamePlay.withScreenSize size
+                    model.gamePlayModel |> Board.withScreenSize size
             in
                 { model
                     | gamePlayModel = gamePlayModel

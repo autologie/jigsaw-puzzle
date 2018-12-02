@@ -1,4 +1,4 @@
-module GamePlay
+module Board
     exposing
         ( Model
         , Msg(..)
