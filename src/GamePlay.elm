@@ -1,85 +1,73 @@
-module View exposing (view)
+module GamePlay exposing (view)
 
 import Json.Decode as Decode exposing (Decoder)
-import Html exposing (Html)
 import Svg exposing (..)
 import Dict
-import Browser
 import Html.Attributes
 import Svg.Attributes exposing (..)
 import Svg.Events exposing (..)
 import Svg.Lazy as Lazy
 import Model exposing (..)
 import Point exposing (Point)
+import JigsawPuzzle exposing (Piece(..), Hook(..))
 
 
-view : Model -> Browser.Document Msg
 view { offset, sizeX, sizeY, pieceSize, groups, dragging, selectedGroups } =
-    { title = ""
-    , body =
-        [ Html.div []
-            [ svg
-                [ width "100vw"
-                , height "100vh"
-                , viewBox "0 0 100vw 100vh"
-                , on "mousemove" (Decode.map MouseMove decodeMouseEvent)
-                , on "mousedown" (Decode.map (\position -> StartSelection position) decodeMouseEvent)
-                , on "mouseup" (Decode.succeed EndSelection)
-                ]
-                [ g
-                    [ transform
-                        ("translate("
-                            ++ (String.fromInt (Tuple.first offset))
-                            ++ ","
-                            ++ (String.fromInt (Tuple.second offset))
-                            ++ ")"
-                        )
-                    ]
-                    (List.concat
-                        [ [ rect
-                                [ Svg.Attributes.style "fill: #eee;"
-                                , width (String.fromInt (sizeX * pieceSize))
-                                , height (String.fromInt (sizeY * pieceSize))
-                                ]
-                                []
-                          ]
-                        , (groups
-                            |> Dict.toList
-                            |> List.sortBy
-                                (\( groupId, group ) ->
-                                    dragging
-                                        |> Maybe.andThen
-                                            (\( id, _ ) ->
-                                                if
-                                                    (id == groupId)
-                                                        || (List.member id selectedGroups
-                                                                && List.member groupId selectedGroups
-                                                           )
-                                                then
-                                                    Just 1000
-                                                else
-                                                    Nothing
-                                            )
-                                        |> Maybe.withDefault group.zIndex
-                                )
-                            |> List.concatMap
-                                (\( groupId, group ) ->
-                                    groupViews
-                                        pieceSize
-                                        (List.member groupId selectedGroups)
-                                        ( groupId, group )
-                                )
-                          )
-                        ]
-                    )
-                ]
-            , Html.div [ Html.Attributes.class "control" ]
-                [ Html.button [ onClick Scatter ] [ Html.text "Scatter" ]
-                , Html.button [ onClick Reset ] [ Html.text "New Puzzle" ]
-                ]
-            ]
+    svg
+        [ width "100vw"
+        , height "100vh"
+        , viewBox "0 0 100vw 100vh"
+        , on "mousemove" (Decode.map MouseMove decodeMouseEvent)
+        , on "mousedown" (Decode.map (\position -> StartSelection position) decodeMouseEvent)
+        , on "mouseup" (Decode.succeed EndSelection)
         ]
-    }
+        [ g
+            [ transform
+                ("translate("
+                    ++ (String.fromInt (Tuple.first offset))
+                    ++ ","
+                    ++ (String.fromInt (Tuple.second offset))
+                    ++ ")"
+                )
+            ]
+            (List.concat
+                [ [ rect
+                        [ Svg.Attributes.style "fill: #eee;"
+                        , width (String.fromInt (sizeX * pieceSize))
+                        , height (String.fromInt (sizeY * pieceSize))
+                        ]
+                        []
+                  ]
+                , (groups
+                    |> Dict.toList
+                    |> List.sortBy
+                        (\( groupId, group ) ->
+                            dragging
+                                |> Maybe.andThen
+                                    (\( id, _ ) ->
+                                        if
+                                            (id == groupId)
+                                                || (List.member id selectedGroups
+                                                        && List.member groupId selectedGroups
+                                                   )
+                                        then
+                                            Just 1000
+                                        else
+                                            Nothing
+                                    )
+                                |> Maybe.withDefault group.zIndex
+                        )
+                    |> List.concatMap
+                        (\( groupId, group ) ->
+                            groupViews
+                                pieceSize
+                                (List.member groupId selectedGroups)
+                                ( groupId, group )
+                        )
+                  )
+                ]
+            )
+        ]
 
 
 groupViews : Int -> Bool -> ( PieceGroupId, PieceGroup ) -> List (Svg Msg)

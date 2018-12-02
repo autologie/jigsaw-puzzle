@@ -1,12 +1,16 @@
-module Main exposing (..)
+module Main exposing (main)
 
 import Browser
 import Browser.Events
 import Dict exposing (Dict)
 import Random exposing (Seed)
+import Html exposing (Html)
+import Html.Attributes
+import Html.Events exposing (..)
+import GamePlay
 import Model exposing (..)
-import View exposing (view)
 import Point exposing (Point)
+import JigsawPuzzle exposing (Piece(..))
 
 
 main =
@@ -33,7 +37,7 @@ initialModel windowSize =
         ( groups, seed ) =
             generateGroups sizeX sizeY pieceSize (Random.initialSeed 0)
     in
-        { offset = offset windowSize ( sizeX, sizeY ) pieceSize
+        { offset = getOffset windowSize ( sizeX, sizeY ) pieceSize
         , sizeX = sizeX
         , sizeY = sizeY
         , pieceSize = pieceSize
@@ -48,172 +52,37 @@ initialModel windowSize =
 generateGroups : Int -> Int -> Int -> Seed -> ( Dict PieceGroupId PieceGroup, Seed )
 generateGroups sizeX sizeY pieceSize seed =
     let
-        plain =
-            plainPieces sizeX sizeY
-                |> List.map (\((Piece index _) as piece) -> ( index, piece ))
+        ( pieces, nextSeed ) =
+            JigsawPuzzle.generate sizeX sizeY seed
+
+        pieceMap =
+            pieces
+                |> List.map (\((Piece index hooks) as piece) -> ( index, piece ))
                 |> Dict.fromList
-
-        trimX x hooks =
-            if x == 0 then
-                { hooks | west = None }
-            else if x == sizeX - 1 then
-                { hooks | east = None }
-            else
-                hooks
-
-        trimY y hooks =
-            if y == 0 then
-                { hooks | north = None }
-            else if y == sizeY - 1 then
-                { hooks | south = None }
-            else
-                hooks
-
-        reducePieces _ (Piece (( indexX, indexY ) as index) hooks) ( pieces, mySeed ) =
-            let
-                ( generatedHooks, updatedSeed ) =
-                    generateHooks mySeed
-            in
-                ( withHooksAssigned
-                    index
-                    (generatedHooks
-                        |> trimX indexX
-                        |> trimY indexY
-                    )
-                    pieces
-                , updatedSeed
-                )
-
-        ( generatedPieces, lastSeed ) =
-            plain |> Dict.foldl reducePieces ( plain, seed )
     in
         ( Dict.singleton 0
-            { pieces = generatedPieces
+            { pieces = pieceMap
             , isSettled = True
             , zIndex = 0
-            , position = defaultPosition pieceSize generatedPieces
+            , position = defaultPosition pieceSize pieceMap
             }
-        , lastSeed
+        , nextSeed
         )
 
 
-plainPieces : Int -> Int -> List Piece
-plainPieces sizeX sizeY =
-    List.range 0 (sizeX - 1)
-        |> List.concatMap
-            (\x ->
-                List.range 0 (sizeY - 1)
-                    |> List.map
-                        (\y ->
-                            Piece
-                                ( x, y )
-                                { north = None
-                                , east = None
-                                , south = None
-                                , west = None
-                                }
-                        )
-            )
-
-
-generateHooks : Seed -> ( Hooks, Seed )
-generateHooks seed0 =
-    let
-        maxDeviation =
-            0.06
-
-        deviationGenerator =
-            Random.float -maxDeviation maxDeviation
-
-        hookTypeGenerator =
-            Random.uniform (Positive 0 0) [ (Negative 0 0) ]
-
-        withDeviation ( hook, seed00 ) =
-            let
-                ( positionDeviation, seed01 ) =
-                    Random.step deviationGenerator seed00
-
-                ( sizeDeviation, seed02 ) =
-                    Random.step deviationGenerator seed01
-            in
-                case hook of
-                    Positive _ _ ->
-                        ( Positive positionDeviation sizeDeviation, seed02 )
-
-                    Negative _ _ ->
-                        ( Negative positionDeviation sizeDeviation, seed02 )
-
-                    None ->
-                        ( None, seed02 )
-
-        ( north, seed1 ) =
-            Random.step hookTypeGenerator seed0 |> withDeviation
-
-        ( east, seed2 ) =
-            Random.step hookTypeGenerator seed1 |> withDeviation
-
-        ( south, seed3 ) =
-            Random.step hookTypeGenerator seed2 |> withDeviation
-
-        ( west, seed4 ) =
-            Random.step hookTypeGenerator seed3 |> withDeviation
-    in
-        ( { north = north
-          , east = east
-          , south = south
-          , west = west
-          }
-        , seed4
-        )
-
-
-withHooksAssigned : Point -> Hooks -> Dict Point Piece -> Dict Point Piece
-withHooksAssigned targetIndex { north, east, south, west } pieces =
-    let
-        assignHooks _ (Piece index hooks) =
-            let
-                diffOfIndex =
-                    targetIndex |> Point.sub index
-
-                updatedHooks =
-                    case Point.toString diffOfIndex of
-                        "(0,0)" ->
-                            { north = north
-                            , east = east
-                            , south = south
-                            , west = west
-                            }
-
-                        "(-1,0)" ->
-                            { hooks | west = negate east }
-
-                        "(1,0)" ->
-                            { hooks | east = negate west }
-
-                        "(0,-1)" ->
-                            { hooks | north = negate south }
-
-                        "(0,1)" ->
-                            { hooks | south = negate north }
-
-                        _ ->
-                            hooks
-            in
-                Piece index updatedHooks
-    in
-        pieces |> Dict.map assignHooks
-
-
-negate hook =
-    case hook of
-        None ->
-            None
-
-        Positive positionDeviation sizeDiviation ->
-            Negative -positionDeviation sizeDiviation
-
-        Negative positionDeviation sizeDiviation ->
-            Positive -positionDeviation sizeDiviation
+view : Model -> Browser.Document Msg
+view model =
+    { title = ""
+    , body =
+        [ Html.div []
+            [ GamePlay.view model
+            , Html.div [ Html.Attributes.class "control" ]
+                [ Html.button [ onClick Scatter ] [ Html.text "Scatter" ]
+                , Html.button [ onClick Reset ] [ Html.text "New Puzzle" ]
+                ]
+            ]
+        ]
+    }
 
 
 update : Msg -> Model -> Model
@@ -296,56 +165,37 @@ update msg model =
 
         ( Nothing, EndSelection ) ->
             case model.selection of
-                Just ( ( fromX, fromY ), ( toX, toY ) ) ->
+                Just ( from, to ) ->
                     let
-                        minSelectionX =
-                            min fromX toX
+                        ( minSelectionX, minSelectionY ) =
+                            Point.min from to
 
-                        maxSelectionX =
-                            max fromX toX
+                        ( maxSelectionX, maxSelectionY ) =
+                            Point.max from to
 
-                        minSelectionY =
-                            min fromY toY
+                        hasIntersection ( _, { pieces, position } ) =
+                            let
+                                ( minGroupX, minGroupY ) =
+                                    position
 
-                        maxSelectionY =
-                            max fromY toY
+                                ( maxGroupX, maxGroupY ) =
+                                    pieces
+                                        |> Dict.keys
+                                        |> List.foldl (\offset passed -> Point.max offset passed) Point.origin
+                                        |> Point.scale model.pieceSize
+                                        |> Point.add position
+                            in
+                                (maxSelectionX > minGroupX)
+                                    && (minSelectionX < maxGroupX)
+                                    && (maxSelectionY > minGroupY)
+                                    && (minSelectionY < maxGroupY)
                     in
                         { model
                             | selection = Nothing
                             , selectedGroups =
                                 model.groups
                                     |> Dict.toList
-                                    |> List.filter
-                                        (\( _, { pieces, position } ) ->
-                                            let
-                                                ( minGroupX, minGroupY ) =
-                                                    position
-
-                                                maxGroupX =
-                                                    minGroupX
-                                                        + model.pieceSize
-                                                        * (pieces
-                                                            |> Dict.keys
-                                                            |> List.map Tuple.first
-                                                            |> List.maximum
-                                                            |> Maybe.withDefault 0
-                                                          )
-
-                                                maxGroupY =
-                                                    minGroupY
-                                                        + model.pieceSize
-                                                        * (pieces
-                                                            |> Dict.keys
-                                                            |> List.map Tuple.second
-                                                            |> List.maximum
-                                                            |> Maybe.withDefault 0
-                                                          )
-                                            in
-                                                (maxSelectionX > minGroupX)
-                                                    && (minSelectionX < maxGroupX)
-                                                    && (maxSelectionY > minGroupY)
-                                                    && (minSelectionY < maxGroupY)
-                                        )
+                                    |> List.filter hasIntersection
                                     |> List.map (\( groupId, _ ) -> groupId)
                         }
 
@@ -402,15 +252,15 @@ update msg model =
 
         ( _, ResizeWindow ( x, y ) ) ->
             { model
-                | offset = offset ( x, y ) ( model.sizeX, model.sizeY ) model.pieceSize
+                | offset = getOffset ( x, y ) ( model.sizeX, model.sizeY ) model.pieceSize
             }
 
         _ ->
             model
 
 
-offset : Point -> Point -> Int -> Point
-offset windowSize boardSize pieceSize =
+getOffset : Point -> Point -> Int -> Point
+getOffset windowSize boardSize pieceSize =
     windowSize
         |> Point.sub (boardSize |> Point.scale pieceSize)
         |> Point.divide 2

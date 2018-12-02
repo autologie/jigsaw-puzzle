@@ -3,24 +3,7 @@ module Model exposing (..)
 import Random
 import Dict exposing (Dict)
 import Point exposing (Point)
-
-
-type Piece
-    = Piece Point Hooks
-
-
-type alias Hooks =
-    { north : Hook
-    , east : Hook
-    , south : Hook
-    , west : Hook
-    }
-
-
-type Hook
-    = Positive Float Float
-    | Negative Float Float
-    | None
+import JigsawPuzzle exposing (Piece)
 
 
 type alias PieceGroupId =
