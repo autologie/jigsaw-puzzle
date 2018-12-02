@@ -344,26 +344,15 @@ updateGroupsOnDrop model targetGroupId groups =
                         mergeableGroups
                             |> Dict.toList
 
-                    _ =
-                        mergeableGroupList |> List.length
-
-                    mergedGroupId =
+                    ( mergedGroupId, mergedGroupPosition ) =
                         mergeableGroupList
-                            |> List.map (\( id, _ ) -> id)
-                            |> List.minimum
-                            |> Maybe.withDefault targetGroupId
-
-                    mergedGroupX =
-                        mergeableGroupList
-                            |> List.map (\( _, { position } ) -> Tuple.first position)
-                            |> List.minimum
-                            |> Maybe.withDefault 0
-
-                    mergedGroupY =
-                        mergeableGroupList
-                            |> List.map (\( _, { position } ) -> Tuple.second position)
-                            |> List.minimum
-                            |> Maybe.withDefault 0
+                            |> List.foldl
+                                (\( groupId, { position } ) ( passedGroupId, passedPosition ) ->
+                                    ( Basics.min passedGroupId groupId
+                                    , Point.min position passedPosition
+                                    )
+                                )
+                                ( targetGroupId, Point.origin )
 
                     mergedGroup =
                         { pieces =
@@ -373,7 +362,7 @@ updateGroupsOnDrop model targetGroupId groups =
                                         let
                                             groupPosition =
                                                 position
-                                                    |> Point.sub ( mergedGroupX, mergedGroupY )
+                                                    |> Point.sub mergedGroupPosition
                                                     |> Point.divideRound model.pieceSize
 
                                             updatedPieces =
@@ -391,10 +380,7 @@ updateGroupsOnDrop model targetGroupId groups =
                                             Dict.union passed updatedPieces
                                     )
                                     Dict.empty
-                        , position =
-                            ( mergedGroupX
-                            , mergedGroupY
-                            )
+                        , position = mergedGroupPosition
                         , zIndex =
                             groups
                                 |> Dict.toList

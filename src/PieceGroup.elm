@@ -29,11 +29,6 @@ type alias Model =
 view : Int -> Bool -> Model -> Svg Msg
 view pieceSize isSelected group =
     let
-        exists ( pX, pY ) =
-            group.pieces
-                |> Dict.values
-                |> List.any (\(Piece position _) -> position == ( pX, pY ))
-
         toMsg msg =
             case msg of
                 Piece.StartDragging point ->
@@ -41,9 +36,6 @@ view pieceSize isSelected group =
 
                 Piece.EndDragging ->
                     EndDragging
-
-        ( groupX, groupY ) =
-            group.position
     in
         g
             [ transform ("translate" ++ (Point.toString group.position)) ]
