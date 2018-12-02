@@ -177,16 +177,23 @@ update msg model =
             }
 
         ( Nothing, MouseMove mousePosition ) ->
-            { model
-                | selection =
-                    model.selection
-                        |> Maybe.map
-                            (\( position, _ ) ->
+            model.selection
+                |> Maybe.map
+                    (\( position, _ ) ->
+                        let
+                            selection =
                                 ( position
                                 , mousePosition |> Point.sub model.offset
                                 )
-                            )
-            }
+                        in
+                            { model
+                                | selection = Just selection
+                                , selectedGroups =
+                                    model.groups
+                                        |> getSelection selection model.pieceSize
+                            }
+                    )
+                |> Maybe.withDefault model
 
         ( Just ( draggingGroupId, touchPosition ), MouseMove mousePosition ) ->
             case Dict.get draggingGroupId model.groups of
@@ -227,45 +234,51 @@ update msg model =
 
         ( Nothing, EndSelection ) ->
             case model.selection of
-                Just ( from, to ) ->
-                    let
-                        ( minSelectionX, minSelectionY ) =
-                            Point.min from to
-
-                        ( maxSelectionX, maxSelectionY ) =
-                            Point.max from to
-
-                        hasIntersection ( _, { pieces, position } ) =
-                            let
-                                ( minGroupX, minGroupY ) =
-                                    position
-
-                                ( maxGroupX, maxGroupY ) =
-                                    pieces
-                                        |> Dict.keys
-                                        |> List.foldl (\offset passed -> Point.max offset passed) Point.origin
-                                        |> Point.scale model.pieceSize
-                                        |> Point.add position
-                            in
-                                (maxSelectionX > minGroupX)
-                                    && (minSelectionX < maxGroupX)
-                                    && (maxSelectionY > minGroupY)
-                                    && (minSelectionY < maxGroupY)
-                    in
-                        { model
-                            | selection = Nothing
-                            , selectedGroups =
-                                model.groups
-                                    |> Dict.toList
-                                    |> List.filter hasIntersection
-                                    |> List.map (\( groupId, _ ) -> groupId)
-                        }
+                Just selection ->
+                    { model
+                        | selection = Nothing
+                        , selectedGroups =
+                            model.groups
+                                |> getSelection selection model.pieceSize
+                    }
 
                 Nothing ->
                     model
 
         _ ->
             model
+
+
+getSelection : ( Point, Point ) -> Int -> Dict GroupId PieceGroup.Model -> List GroupId
+getSelection ( from, to ) pieceSize groups =
+    let
+        ( minSelectionX, minSelectionY ) =
+            Point.min from to
+
+        ( maxSelectionX, maxSelectionY ) =
+            Point.max from to
+
+        hasIntersection ( _, { pieces, position } ) =
+            let
+                ( minGroupX, minGroupY ) =
+                    position
+
+                ( maxGroupX, maxGroupY ) =
+                    pieces
+                        |> Dict.keys
+                        |> List.foldl (\offset passed -> Point.max offset passed) Point.origin
+                        |> Point.scale pieceSize
+                        |> Point.add position
+            in
+                (maxSelectionX > minGroupX)
+                    && (minSelectionX < maxGroupX)
+                    && (maxSelectionY > minGroupY)
+                    && (minSelectionY < maxGroupY)
+    in
+        groups
+            |> Dict.toList
+            |> List.filter hasIntersection
+            |> List.map (\( groupId, _ ) -> groupId)
 
 
 generateGroups : Int -> Int -> Int -> Seed -> ( Dict GroupId PieceGroup.Model, Seed )
