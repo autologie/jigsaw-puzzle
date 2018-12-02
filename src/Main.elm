@@ -50,7 +50,7 @@ generateGroups sizeX sizeY pieceSize seed =
     let
         plain =
             plainPieces sizeX sizeY
-                |> List.map (\((Piece point _) as piece) -> ( point, piece ))
+                |> List.map (\((Piece index _) as piece) -> ( index, piece ))
                 |> Dict.fromList
 
         trimX x hooks =
@@ -69,16 +69,16 @@ generateGroups sizeX sizeY pieceSize seed =
             else
                 hooks
 
-        reducePieces _ (Piece (( pieceX, pieceY ) as position) hooks) ( pieces, mySeed ) =
+        reducePieces _ (Piece (( indexX, indexY ) as index) hooks) ( pieces, mySeed ) =
             let
                 ( generatedHooks, updatedSeed ) =
                     generateHooks mySeed
             in
                 ( withHooksAssigned
-                    position
+                    index
                     (generatedHooks
-                        |> trimX pieceX
-                        |> trimY pieceY
+                        |> trimX indexX
+                        |> trimY indexY
                     )
                     pieces
                 , updatedSeed
@@ -168,41 +168,38 @@ generateHooks seed0 =
 
 
 withHooksAssigned : Point -> Hooks -> Dict Point Piece -> Dict Point Piece
-withHooksAssigned targetPosition { north, east, south, west } pieces =
+withHooksAssigned targetIndex { north, east, south, west } pieces =
     let
-        assignHooks =
-            \_ (Piece position hooks) ->
-                let
-                    updatedHooks =
-                        case
-                            (targetPosition
-                                |> Point.sub position
-                                |> Point.toString
-                            )
-                        of
-                            "(0,0)" ->
-                                { north = north
-                                , east = east
-                                , south = south
-                                , west = west
-                                }
+        assignHooks _ (Piece index hooks) =
+            let
+                diffOfIndex =
+                    targetIndex |> Point.sub index
 
-                            "(-1,0)" ->
-                                { hooks | west = negate east }
+                updatedHooks =
+                    case Point.toString diffOfIndex of
+                        "(0,0)" ->
+                            { north = north
+                            , east = east
+                            , south = south
+                            , west = west
+                            }
 
-                            "(1,0)" ->
-                                { hooks | east = negate west }
+                        "(-1,0)" ->
+                            { hooks | west = negate east }
 
-                            "(0,-1)" ->
-                                { hooks | north = negate south }
+                        "(1,0)" ->
+                            { hooks | east = negate west }
 
-                            "(0,1)" ->
-                                { hooks | south = negate north }
+                        "(0,-1)" ->
+                            { hooks | north = negate south }
 
-                            _ ->
-                                hooks
-                in
-                    Piece position updatedHooks
+                        "(0,1)" ->
+                            { hooks | south = negate north }
+
+                        _ ->
+                            hooks
+            in
+                Piece index updatedHooks
     in
         pieces |> Dict.map assignHooks
 
@@ -422,18 +419,18 @@ offset windowSize boardSize pieceSize =
 defaultPosition : Int -> Dict Point Piece -> Point
 defaultPosition pieceSize pieces =
     let
-        minPosition =
+        minIndex =
             case pieces |> Dict.values of
-                (Piece headPosition _) :: tail ->
+                (Piece headIndex _) :: tail ->
                     List.foldl
-                        (\(Piece position _) passed -> Point.min position passed)
-                        headPosition
+                        (\(Piece index _) passed -> Point.min index passed)
+                        headIndex
                         tail
 
                 _ ->
                     Point.origin
     in
-        minPosition |> Point.scale pieceSize
+        minIndex |> Point.scale pieceSize
 
 
 isCorrectDrop : Model -> PieceGroup -> Bool
@@ -543,43 +540,44 @@ isMergeable pieceSize group anotherGroup =
     group.pieces
         |> Dict.toList
         |> List.any
-            (\( pieceOffset, Piece piecePosition _ ) ->
+            (\( pieceOffset, Piece pieceIndex _ ) ->
                 let
                     position =
                         pieceOffset
                             |> Point.scale pieceSize
                             |> Point.add group.position
+
+                    isNear p =
+                        Point.distance position p < 10
+
+                    isAdjacentToPiece anotherPieceOffset (Piece anotherPieceIndex _) =
+                        let
+                            anotherPosition =
+                                anotherPieceOffset
+                                    |> Point.scale pieceSize
+                                    |> Point.add anotherGroup.position
+
+                            diffOfIndex =
+                                pieceIndex |> Point.sub anotherPieceIndex
+                        in
+                            case Point.toString diffOfIndex of
+                                "(0,1)" ->
+                                    isNear (Point.add anotherPosition ( 0, pieceSize ))
+
+                                "(0,-1)" ->
+                                    isNear (Point.add anotherPosition ( 0, -pieceSize ))
+
+                                "(1,0)" ->
+                                    isNear (Point.add anotherPosition ( pieceSize, 0 ))
+
+                                "(-1,0)" ->
+                                    isNear (Point.add anotherPosition ( -pieceSize, 0 ))
+
+                                _ ->
+                                    False
                 in
                     anotherGroup.pieces
-                        |> Dict.filter
-                            (\anotherPieceOffset (Piece anotherPiecePosition _) ->
-                                let
-                                    anotherPosition =
-                                        anotherPieceOffset
-                                            |> Point.scale pieceSize
-                                            |> Point.add anotherGroup.position
-                                in
-                                    case
-                                        (piecePosition
-                                            |> Point.sub anotherPiecePosition
-                                            |> Point.toString
-                                        )
-                                    of
-                                        "(0,1)" ->
-                                            Point.distance position (Point.add anotherPosition ( 0, pieceSize )) < 10
-
-                                        "(0,-1)" ->
-                                            Point.distance position (Point.add anotherPosition ( 0, -pieceSize )) < 10
-
-                                        "(1,0)" ->
-                                            Point.distance position (Point.add anotherPosition ( pieceSize, 0 )) < 10
-
-                                        "(-1,0)" ->
-                                            Point.distance position (Point.add anotherPosition ( -pieceSize, 0 )) < 10
-
-                                        _ ->
-                                            False
-                            )
+                        |> Dict.filter isAdjacentToPiece
                         |> Dict.isEmpty
                         |> not
             )
