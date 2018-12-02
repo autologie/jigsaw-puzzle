@@ -7,7 +7,7 @@ import Random exposing (Seed)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events exposing (..)
-import GamePlay exposing (PieceGroupId, PieceGroup)
+import GamePlay
 import Point exposing (Point)
 import JigsawPuzzle exposing (Piece(..))
 

@@ -1,8 +1,6 @@
 module GamePlay
     exposing
-        ( PieceGroupId
-        , PieceGroup
-        , Model
+        ( Model
         , Msg(..)
         , view
         , update
@@ -22,23 +20,11 @@ import Svg.Events exposing (..)
 import Svg.Lazy as Lazy
 import Point exposing (Point)
 import JigsawPuzzle exposing (Piece(..), Hook(..))
-import Piece
-
-
-type alias PieceGroupId =
-    Int
-
-
-type alias PieceGroup =
-    { pieces : Dict Point Piece
-    , position : Point
-    , isSettled : Bool
-    , zIndex : Int
-    }
+import PieceGroup
 
 
 type Msg
-    = StartDragging PieceGroupId Point
+    = StartDragging GroupId Point
     | EndDragging
     | MouseMove Point
     | StartSelection Point
@@ -50,11 +36,15 @@ type alias Model =
     , sizeX : Int
     , sizeY : Int
     , pieceSize : Int
-    , groups : Dict PieceGroupId PieceGroup
-    , dragging : Maybe ( PieceGroupId, Point )
+    , groups : Dict GroupId PieceGroup.Model
+    , dragging : Maybe ( GroupId, Point )
     , selection : Maybe ( Point, Point )
-    , selectedGroups : List PieceGroupId
+    , selectedGroups : List GroupId
     }
+
+
+type alias GroupId =
+    Int
 
 
 initialModel : Point -> Seed -> ( Model, Seed )
@@ -87,32 +77,54 @@ initialModel screenSize seed =
 
 view : Model -> Html Msg
 view { offset, sizeX, sizeY, pieceSize, groups, dragging, selectedGroups } =
-    svg
-        [ width "100vw"
-        , height "100vh"
-        , viewBox "0 0 100vw 100vh"
-        , on "mousemove" (Decode.map MouseMove decodeMouseEvent)
-        , on "mousedown" (Decode.map (\position -> StartSelection position) decodeMouseEvent)
-        , on "mouseup" (Decode.succeed EndSelection)
-        ]
-        [ g
-            [ transform ("translate" ++ (Point.toString offset)) ]
-            (List.concat
-                [ [ rect
-                        [ Svg.Attributes.style "fill: #eee;"
-                        , width (String.fromInt (sizeX * pieceSize))
-                        , height (String.fromInt (sizeY * pieceSize))
-                        ]
-                        []
-                  ]
-                , (groups
-                    |> Dict.toList
-                    |> List.sortBy (groupZIndex dragging selectedGroups)
-                    |> List.map (Lazy.lazy3 groupView pieceSize selectedGroups)
-                  )
-                ]
-            )
-        ]
+    let
+        toMsg groupId msg =
+            case msg of
+                PieceGroup.StartDragging point ->
+                    StartDragging groupId point
+
+                PieceGroup.EndDragging ->
+                    EndDragging
+
+        groupView ( groupId, group ) =
+            let
+                isSelected =
+                    List.member groupId selectedGroups
+            in
+                (Lazy.lazy3
+                    PieceGroup.view
+                    pieceSize
+                    isSelected
+                    group
+                )
+                    |> Svg.map (toMsg groupId)
+    in
+        svg
+            [ width "100vw"
+            , height "100vh"
+            , viewBox "0 0 100vw 100vh"
+            , on "mousemove" (Decode.map MouseMove decodeMouseEvent)
+            , on "mousedown" (Decode.map (\position -> StartSelection position) decodeMouseEvent)
+            , on "mouseup" (Decode.succeed EndSelection)
+            ]
+            [ g
+                [ transform ("translate" ++ (Point.toString offset)) ]
+                (List.concat
+                    [ [ rect
+                            [ Svg.Attributes.style "fill: #eee;"
+                            , width (String.fromInt (sizeX * pieceSize))
+                            , height (String.fromInt (sizeY * pieceSize))
+                            ]
+                            []
+                      ]
+                    , (groups
+                        |> Dict.toList
+                        |> List.sortBy (groupZIndex dragging selectedGroups)
+                        |> List.map groupView
+                      )
+                    ]
+                )
+            ]
 
 
 groupZIndex dragging selectedGroups ( groupId, group ) =
@@ -132,37 +144,6 @@ groupZIndex dragging selectedGroups ( groupId, group ) =
         |> Maybe.withDefault group.zIndex
 
 
-groupView : Int -> List PieceGroupId -> ( PieceGroupId, PieceGroup ) -> Svg Msg
-groupView pieceSize selectedGroups ( groupId, group ) =
-    let
-        isSelected =
-            List.member groupId selectedGroups
-
-        exists ( pX, pY ) =
-            group.pieces
-                |> Dict.values
-                |> List.any (\(Piece position _) -> position == ( pX, pY ))
-
-        toMsg msg =
-            case msg of
-                Piece.StartDragging point ->
-                    StartDragging groupId (point |> Point.sub group.position)
-
-                Piece.EndDragging ->
-                    EndDragging
-
-        ( groupX, groupY ) =
-            group.position
-    in
-        g
-            [ transform ("translate" ++ (Point.toString group.position)) ]
-            (group.pieces
-                |> Dict.map (Lazy.lazy4 Piece.view pieceSize isSelected)
-                |> Dict.values
-                |> List.map (Html.map toMsg)
-            )
-
-
 decodeMouseEvent =
     Decode.map2 (\eventX eventY -> ( eventX, eventY ))
         (Decode.at [ "offsetX" ] Decode.int)
@@ -175,9 +156,6 @@ update msg model =
         ( Nothing, StartDragging targetGroupId touchPosition ) ->
             { model
                 | dragging = Just ( targetGroupId, touchPosition )
-                , groups =
-                    model.groups
-                        |> Dict.map (\_ group -> { group | isSettled = False })
             }
 
         ( Nothing, StartSelection touchPosition ) ->
@@ -290,7 +268,7 @@ update msg model =
             model
 
 
-generateGroups : Int -> Int -> Int -> Seed -> ( Dict PieceGroupId PieceGroup, Seed )
+generateGroups : Int -> Int -> Int -> Seed -> ( Dict GroupId PieceGroup.Model, Seed )
 generateGroups sizeX sizeY pieceSize seed =
     let
         ( pieces, nextSeed ) =
@@ -303,7 +281,6 @@ generateGroups sizeX sizeY pieceSize seed =
     in
         ( Dict.singleton 0
             { pieces = pieceMap
-            , isSettled = True
             , zIndex = 0
             , position = defaultPosition pieceSize pieceMap
             }
@@ -328,7 +305,7 @@ defaultPosition pieceSize pieces =
         minIndex |> Point.scale pieceSize
 
 
-isCorrectDrop : Model -> PieceGroup -> Bool
+isCorrectDrop : Model -> PieceGroup.Model -> Bool
 isCorrectDrop { pieceSize } group =
     (Point.distance
         group.position
@@ -337,7 +314,7 @@ isCorrectDrop { pieceSize } group =
         < 10
 
 
-updateGroupsOnDrop : Model -> PieceGroupId -> Dict PieceGroupId PieceGroup -> Dict PieceGroupId PieceGroup
+updateGroupsOnDrop : Model -> GroupId -> Dict GroupId PieceGroup.Model -> Dict GroupId PieceGroup.Model
 updateGroupsOnDrop model targetGroupId groups =
     Dict.get targetGroupId groups
         |> Maybe.map
@@ -401,7 +378,6 @@ updateGroupsOnDrop model targetGroupId groups =
                                             Dict.union passed updatedPieces
                                     )
                                     Dict.empty
-                        , isSettled = mergeableGroups |> Dict.toList |> List.any (\( _, { isSettled } ) -> isSettled)
                         , position =
                             ( mergedGroupX
                             , mergedGroupY
@@ -422,7 +398,6 @@ updateGroupsOnDrop model targetGroupId groups =
                 if isCorrectDrop model group then
                     { group
                         | position = defaultPosition model.pieceSize group.pieces
-                        , isSettled = True
                         , zIndex = 0
                     }
                 else
@@ -430,7 +405,7 @@ updateGroupsOnDrop model targetGroupId groups =
             )
 
 
-isMergeable : Int -> PieceGroup -> PieceGroup -> Bool
+isMergeable : Int -> PieceGroup.Model -> PieceGroup.Model -> Bool
 isMergeable pieceSize group anotherGroup =
     group.pieces
         |> Dict.toList
@@ -493,7 +468,6 @@ scatterPieces initialSeed model =
                     index
                     { pieces = Dict.singleton Point.origin piece
                     , position = ( x, y )
-                    , isSettled = False
                     , zIndex = 0
                     }
                     passed

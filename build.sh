@@ -19,5 +19,5 @@ if [ "$PROD" = "true" ]; then
   echo "Gzipped size: $(cat $min | gzip -c | wc -c) bytes"
 
 else
-  elm make ./src/Main.elm --output=$min $@
+  elm make ./src/Main.elm --debug --output=$min $@
 fi
