@@ -352,7 +352,7 @@ updateGroupsOnDrop model targetGroupId groups =
                                     , Point.min position passedPosition
                                     )
                                 )
-                                ( targetGroupId, Point.origin )
+                                ( targetGroupId, targetGroup.position )
 
                     mergedGroup =
                         { pieces =
