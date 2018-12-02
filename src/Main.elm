@@ -38,24 +38,9 @@ main =
 initialModel : ( Int, Int ) -> Model
 initialModel windowSize =
     let
-        sizeX =
-            15
-
-        sizeY =
-            10
-
-        pieceSize =
-            50
-
-        offset =
-            getOffset windowSize ( sizeX, sizeY ) pieceSize
-
         ( gamePlayModel, seed ) =
             GamePlay.initialModel
-                sizeX
-                sizeY
-                pieceSize
-                offset
+                windowSize
                 (Random.initialSeed 0)
     in
         { windowSize = windowSize
@@ -89,32 +74,20 @@ update msg model =
 
         Reset ->
             let
-                { sizeX, sizeY, pieceSize } =
-                    model.gamePlayModel
-
-                offset =
-                    getOffset
-                        model.windowSize
-                        ( sizeX, sizeY )
-                        pieceSize
-
                 ( gamePlayModel, seed ) =
                     GamePlay.initialModel
-                        sizeX
-                        sizeY
-                        pieceSize
-                        offset
+                        model.windowSize
                         model.seed
             in
                 { model
-                    | gamePlayModel = gamePlayModel
-                    , seed = seed
+                    | seed = seed
+                    , gamePlayModel = gamePlayModel
                 }
 
         Scatter ->
             let
                 ( gamePlayModel, seed ) =
-                    GamePlay.scatterPieces model.seed model.gamePlayModel
+                    model.gamePlayModel |> GamePlay.scatterPieces model.seed
             in
                 { model
                     | seed = seed
@@ -124,25 +97,8 @@ update msg model =
         ResizeWindow size ->
             let
                 gamePlayModel =
-                    model.gamePlayModel
-
-                { sizeX, sizeY, pieceSize } =
-                    gamePlayModel
+                    model.gamePlayModel |> GamePlay.withScreenSize size
             in
                 { model
-                    | gamePlayModel =
-                        { gamePlayModel
-                            | offset =
-                                getOffset
-                                    size
-                                    ( sizeX, sizeY )
-                                    pieceSize
-                        }
+                    | gamePlayModel = gamePlayModel
                 }
-
-
-getOffset : Point -> Point -> Int -> Point
-getOffset windowSize boardSize pieceSize =
-    windowSize
-        |> Point.sub (boardSize |> Point.scale pieceSize)
-        |> Point.divide 2

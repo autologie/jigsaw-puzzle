@@ -15,37 +15,27 @@ type Msg
 
 
 view :
-    Point
-    -> Int
+    Int
     -> Point
     -> Bool
     -> Piece
     -> Svg Msg
-view ( offsetX, offsetY ) pieceSize ( x, y ) isSelected piece =
+view pieceSize position isSelected piece =
     -- TODO: draw connected sides with lighter color
     g
         [ transform
-            ("translate("
-                ++ (String.fromInt (x * pieceSize + offsetX))
-                ++ ","
-                ++ (String.fromInt (y * pieceSize + offsetY))
-                ++ ")"
+            ("translate"
+                ++ (position
+                        |> Point.scale pieceSize
+                        |> Point.toString
+                   )
             )
         ]
         [ Svg.path
             [ d (piecePath pieceSize piece)
             , stroke "red"
             , fill (fillColor isSelected)
-            , on "mousedown"
-                (Decode.map
-                    (\( eventX, eventY ) ->
-                        StartDragging
-                            ( eventX - offsetX
-                            , eventY - offsetY
-                            )
-                    )
-                    decodeMouseEvent
-                )
+            , on "mousedown" (Decode.map StartDragging decodeMouseEvent)
             , onMouseUp EndDragging
             ]
             []

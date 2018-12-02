@@ -8,6 +8,7 @@ module GamePlay
         , update
         , initialModel
         , scatterPieces
+        , withScreenSize
         )
 
 import Json.Decode as Decode exposing (Decoder)
@@ -56,13 +57,22 @@ type alias Model =
     }
 
 
-initialModel : Int -> Int -> Int -> Point -> Seed -> ( Model, Seed )
-initialModel sizeX sizeY pieceSize offset seed =
+initialModel : Point -> Seed -> ( Model, Seed )
+initialModel screenSize seed =
     let
+        sizeX =
+            15
+
+        sizeY =
+            10
+
+        pieceSize =
+            50
+
         ( groups, updatedSeed ) =
             generateGroups sizeX sizeY pieceSize seed
     in
-        ( { offset = offset
+        ( { offset = getOffset screenSize ( sizeX, sizeY ) pieceSize
           , sizeX = sizeX
           , sizeY = sizeY
           , pieceSize = pieceSize
@@ -86,14 +96,7 @@ view { offset, sizeX, sizeY, pieceSize, groups, dragging, selectedGroups } =
         , on "mouseup" (Decode.succeed EndSelection)
         ]
         [ g
-            [ transform
-                ("translate("
-                    ++ (String.fromInt (Tuple.first offset))
-                    ++ ","
-                    ++ (String.fromInt (Tuple.second offset))
-                    ++ ")"
-                )
-            ]
+            [ transform ("translate" ++ (Point.toString offset)) ]
             (List.concat
                 [ [ rect
                         [ Svg.Attributes.style "fill: #eee;"
@@ -105,9 +108,9 @@ view { offset, sizeX, sizeY, pieceSize, groups, dragging, selectedGroups } =
                 , (groups
                     |> Dict.toList
                     |> List.sortBy (groupZIndex dragging selectedGroups)
-                    |> List.concatMap
+                    |> List.map
                         (\( groupId, group ) ->
-                            groupViews
+                            groupView
                                 pieceSize
                                 (List.member groupId selectedGroups)
                                 ( groupId, group )
@@ -135,8 +138,8 @@ groupZIndex dragging selectedGroups ( groupId, group ) =
         |> Maybe.withDefault group.zIndex
 
 
-groupViews : Int -> Bool -> ( PieceGroupId, PieceGroup ) -> List (Svg Msg)
-groupViews pieceSize isSelected ( groupId, group ) =
+groupView : Int -> Bool -> ( PieceGroupId, PieceGroup ) -> Svg Msg
+groupView pieceSize isSelected ( groupId, group ) =
     let
         exists ( pX, pY ) =
             group.pieces
@@ -146,25 +149,30 @@ groupViews pieceSize isSelected ( groupId, group ) =
         toMsg msg =
             case msg of
                 Piece.StartDragging point ->
-                    StartDragging groupId point
+                    StartDragging groupId (point |> Point.sub group.position)
 
                 Piece.EndDragging ->
                     EndDragging
+
+        ( groupX, groupY ) =
+            group.position
     in
-        group.pieces
-            |> Dict.map
-                (\position piece ->
-                    (Lazy.lazy5
-                        Piece.view
-                        group.position
-                        pieceSize
-                        position
-                        isSelected
-                        piece
+        g
+            [ transform ("translate" ++ (Point.toString group.position)) ]
+            (group.pieces
+                |> Dict.map
+                    (\position piece ->
+                        (Lazy.lazy4
+                            Piece.view
+                            pieceSize
+                            position
+                            isSelected
+                            piece
+                        )
+                            |> Svg.map toMsg
                     )
-                        |> Svg.map toMsg
-                )
-            |> Dict.values
+                |> Dict.values
+            )
 
 
 decodeMouseEvent =
@@ -514,3 +522,21 @@ scatterPieces initialSeed model =
         ( { model | groups = groups }
         , seed
         )
+
+
+withScreenSize : Point -> Model -> Model
+withScreenSize size model =
+    { model
+        | offset =
+            getOffset
+                size
+                ( model.sizeX, model.sizeY )
+                model.pieceSize
+    }
+
+
+getOffset : Point -> Point -> Int -> Point
+getOffset screenSize boardSize pieceSize =
+    screenSize
+        |> Point.sub (boardSize |> Point.scale pieceSize)
+        |> Point.divide 2
