@@ -15,6 +15,7 @@ import Svg exposing (..)
 import Dict exposing (Dict)
 import Html exposing (Html)
 import Html.Attributes
+import Svg.Keyed
 import Svg.Attributes exposing (..)
 import Svg.Events exposing (..)
 import Svg.Lazy as Lazy
@@ -98,6 +99,7 @@ view { offset, sizeX, sizeY, pieceSize, groups, dragging, selectedGroups } =
                     group
                 )
                     |> Svg.map (toMsg groupId)
+                    |> (\element -> ( String.fromInt groupId, element ))
     in
         svg
             [ width "100vw"
@@ -107,15 +109,17 @@ view { offset, sizeX, sizeY, pieceSize, groups, dragging, selectedGroups } =
             , on "mousedown" (Decode.map (\position -> StartSelection position) decodeMouseEvent)
             , on "mouseup" (Decode.succeed EndSelection)
             ]
-            [ g
+            [ Svg.Keyed.node "g"
                 [ transform ("translate" ++ (Point.toString offset)) ]
                 (List.concat
-                    [ [ rect
+                    [ [ ( "board"
+                        , rect
                             [ Svg.Attributes.style "fill: #eee;"
                             , width (String.fromInt (sizeX * pieceSize))
                             , height (String.fromInt (sizeY * pieceSize))
                             ]
                             []
+                        )
                       ]
                     , (groups
                         |> Dict.toList
