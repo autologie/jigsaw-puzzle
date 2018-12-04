@@ -29,7 +29,7 @@ type Msg
     | EndDragging
     | MouseMove Point
     | StartSelection Point
-    | EndSelection
+    | EndSelection Bounds
 
 
 type alias Model =
@@ -39,9 +39,13 @@ type alias Model =
     , pieceSize : Int
     , groups : Dict GroupId PieceGroup.Model
     , dragging : Maybe ( GroupId, Point )
-    , selection : Maybe ( Point, Point )
+    , selection : Maybe Bounds
     , selectedGroups : List GroupId
     }
+
+
+type alias Bounds =
+    ( Point, Point )
 
 
 type alias GroupId =
@@ -77,92 +81,50 @@ initialModel screenSize seed =
 
 
 view : Model -> Html Msg
-view { offset, sizeX, sizeY, pieceSize, groups, dragging, selectedGroups } =
-    let
-        toMsg groupId msg =
-            case msg of
-                PieceGroup.StartDragging point ->
-                    StartDragging groupId point
-
-                PieceGroup.EndDragging ->
-                    EndDragging
-
-        groupView ( groupId, group ) =
-            let
-                isSelected =
-                    List.member groupId selectedGroups
-            in
-                (Lazy.lazy3
-                    PieceGroup.view
-                    pieceSize
-                    isSelected
-                    group
-                )
-                    |> Svg.map (toMsg groupId)
-                    |> (\element -> ( String.fromInt groupId, element ))
-    in
-        svg
-            [ width "100vw"
-            , height "100vh"
-            , viewBox "0 0 100vw 100vh"
-            , on "mousemove" (Decode.map MouseMove decodeMouseEvent)
-            , on "mousedown" (Decode.map (\position -> StartSelection position) decodeMouseEvent)
-            , on "mouseup" (Decode.succeed EndSelection)
-            ]
-            [ Svg.Keyed.node "g"
-                [ transform ("translate" ++ (Point.toString offset)) ]
-                (List.concat
-                    [ [ ( "board"
-                        , rect
-                            [ Svg.Attributes.style "fill: #eee;"
-                            , width (String.fromInt (sizeX * pieceSize))
-                            , height (String.fromInt (sizeY * pieceSize))
-                            ]
-                            []
-                        )
-                      ]
-                    , (groups
-                        |> Dict.toList
-                        |> List.sortBy (groupZIndex dragging selectedGroups)
-                        |> List.map groupView
-                      )
-                    ]
-                )
-            ]
-
-
-groupZIndex dragging selectedGroups ( groupId, group ) =
-    dragging
-        |> Maybe.andThen
-            (\( id, _ ) ->
-                if
-                    (id == groupId)
-                        || (List.member id selectedGroups
-                                && List.member groupId selectedGroups
-                           )
-                then
-                    Just 1000
-                else
-                    Nothing
+view { offset, sizeX, sizeY, pieceSize, groups, dragging, selection, selectedGroups } =
+    svg
+        ([ width "100vw"
+         , height "100vh"
+         , viewBox "0 0 100vw 100vh"
+         , on "mousemove" (Decode.map MouseMove decodeMouseEvent)
+         , on "mousedown" (Decode.map (\position -> StartSelection position) decodeMouseEvent)
+         ]
+            ++ (selection
+                    |> Maybe.map (\sel -> [ on "mouseup" (Decode.succeed (EndSelection sel)) ])
+                    |> Maybe.withDefault []
+               )
+        )
+        [ Svg.Keyed.node "g"
+            [ transform ("translate" ++ (Point.toString offset)) ]
+            (List.concat
+                [ [ ( "board"
+                    , rect
+                        [ Svg.Attributes.style "fill: #eee;"
+                        , width (String.fromInt (sizeX * pieceSize))
+                        , height (String.fromInt (sizeY * pieceSize))
+                        ]
+                        []
+                    )
+                  ]
+                , (groups
+                    |> Dict.toList
+                    |> List.sortBy (groupZIndex dragging selectedGroups)
+                    |> List.map (groupView pieceSize selectedGroups)
+                  )
+                ]
             )
-        |> Maybe.withDefault group.zIndex
-
-
-decodeMouseEvent =
-    Decode.map2 (\eventX eventY -> ( eventX, eventY ))
-        (Decode.at [ "offsetX" ] Decode.int)
-        (Decode.at [ "offsetY" ] Decode.int)
+        ]
 
 
 update : Msg -> Model -> Model
 update msg model =
-    case ( model.dragging, msg ) of
-        ( Nothing, StartDragging targetGroupId touchPosition ) ->
+    case ( model.selection, model.dragging, msg ) of
+        ( _, Nothing, StartDragging targetGroupId touchPosition ) ->
             { model
                 | dragging = Just ( targetGroupId, touchPosition )
             }
 
-        ( Nothing, StartSelection touchPosition ) ->
+        ( _, Nothing, StartSelection touchPosition ) ->
             let
                 selectPosition =
                     touchPosition |> Point.sub model.offset
@@ -171,35 +133,30 @@ update msg model =
                     | selection = Just ( selectPosition, selectPosition )
                 }
 
-        ( Just ( targetGroupId, _ ), EndDragging ) ->
+        ( _, Just ( targetGroupId, _ ), EndDragging ) ->
             { model
                 | dragging = Nothing
                 , groups =
                     model.groups
-                        |> updateGroupsOnDrop model targetGroupId
+                        |> updateGroupsOnDrop model.pieceSize targetGroupId
                 , selectedGroups = []
             }
 
-        ( Nothing, MouseMove mousePosition ) ->
-            model.selection
-                |> Maybe.map
-                    (\( position, _ ) ->
-                        let
-                            selection =
-                                ( position
-                                , mousePosition |> Point.sub model.offset
-                                )
-                        in
-                            { model
-                                | selection = Just selection
-                                , selectedGroups =
-                                    model.groups
-                                        |> getSelection selection model.pieceSize
-                            }
+        ( Just ( position, _ ), Nothing, MouseMove mousePosition ) ->
+            let
+                selection =
+                    ( position
+                    , mousePosition |> Point.sub model.offset
                     )
-                |> Maybe.withDefault model
+            in
+                { model
+                    | selection = Just selection
+                    , selectedGroups =
+                        model.groups
+                            |> getSelection selection model.pieceSize
+                }
 
-        ( Just ( draggingGroupId, touchPosition ), MouseMove mousePosition ) ->
+        ( _, Just ( draggingGroupId, touchPosition ), MouseMove mousePosition ) ->
             case Dict.get draggingGroupId model.groups of
                 Just { position } ->
                     let
@@ -236,24 +193,68 @@ update msg model =
                 Nothing ->
                     model
 
-        ( Nothing, EndSelection ) ->
-            case model.selection of
-                Just selection ->
-                    { model
-                        | selection = Nothing
-                        , selectedGroups =
-                            model.groups
-                                |> getSelection selection model.pieceSize
-                    }
-
-                Nothing ->
-                    model
+        ( _, Nothing, EndSelection selection ) ->
+            { model
+                | selection = Nothing
+                , selectedGroups =
+                    model.groups
+                        |> getSelection selection model.pieceSize
+            }
 
         _ ->
             model
 
 
-getSelection : ( Point, Point ) -> Int -> Dict GroupId PieceGroup.Model -> List GroupId
+groupView : Int -> List GroupId -> ( GroupId, PieceGroup.Model ) -> ( String, Svg.Svg Msg )
+groupView pieceSize selectedGroups ( groupId, group ) =
+    let
+        toMsg msg =
+            case msg of
+                PieceGroup.StartDragging point ->
+                    StartDragging groupId point
+
+                PieceGroup.EndDragging ->
+                    EndDragging
+
+        isSelected =
+            List.member groupId selectedGroups
+    in
+        (Lazy.lazy3
+            PieceGroup.view
+            pieceSize
+            isSelected
+            group
+        )
+            |> Svg.map toMsg
+            |> (\element -> ( String.fromInt groupId, element ))
+
+
+groupZIndex : Maybe ( GroupId, a ) -> List GroupId -> ( GroupId, PieceGroup.Model ) -> Int
+groupZIndex dragging selectedGroups ( groupId, group ) =
+    dragging
+        |> Maybe.andThen
+            (\( id, _ ) ->
+                if
+                    (id == groupId)
+                        || (List.member id selectedGroups
+                                && List.member groupId selectedGroups
+                           )
+                then
+                    Just 1000
+                else
+                    Nothing
+            )
+        |> Maybe.withDefault group.zIndex
+
+
+decodeMouseEvent : Decode.Decoder Point
+decodeMouseEvent =
+    Decode.map2 (\eventX eventY -> ( eventX, eventY ))
+        (Decode.at [ "offsetX" ] Decode.int)
+        (Decode.at [ "offsetY" ] Decode.int)
+
+
+getSelection : Bounds -> Int -> Dict GroupId PieceGroup.Model -> List GroupId
 getSelection ( from, to ) pieceSize groups =
     let
         ( minSelectionX, minSelectionY ) =
@@ -322,8 +323,8 @@ defaultPosition pieceSize pieces =
         minIndex |> Point.scale pieceSize
 
 
-isCorrectDrop : Model -> PieceGroup.Model -> Bool
-isCorrectDrop { pieceSize } group =
+isCorrectDrop : Int -> PieceGroup.Model -> Bool
+isCorrectDrop pieceSize group =
     (Point.distance
         group.position
         (defaultPosition pieceSize group.pieces)
@@ -331,8 +332,8 @@ isCorrectDrop { pieceSize } group =
         < 10
 
 
-updateGroupsOnDrop : Model -> GroupId -> Dict GroupId PieceGroup.Model -> Dict GroupId PieceGroup.Model
-updateGroupsOnDrop model targetGroupId groups =
+updateGroupsOnDrop : Int -> GroupId -> Dict GroupId PieceGroup.Model -> Dict GroupId PieceGroup.Model
+updateGroupsOnDrop pieceSize targetGroupId groups =
     Dict.get targetGroupId groups
         |> Maybe.map
             (\targetGroup ->
@@ -341,7 +342,7 @@ updateGroupsOnDrop model targetGroupId groups =
                         groups
                             |> Dict.partition
                                 (\groupId group ->
-                                    groupId == targetGroupId || isMergeable model.pieceSize group targetGroup
+                                    groupId == targetGroupId || isMergeable pieceSize group targetGroup
                                 )
 
                     mergeableGroupList =
@@ -367,7 +368,7 @@ updateGroupsOnDrop model targetGroupId groups =
                                             groupPosition =
                                                 position
                                                     |> Point.sub mergedGroupPosition
-                                                    |> Point.divideRound model.pieceSize
+                                                    |> Point.divideRound pieceSize
 
                                             updatedPieces =
                                                 pieces
@@ -398,9 +399,9 @@ updateGroupsOnDrop model targetGroupId groups =
         |> Maybe.withDefault groups
         |> Dict.map
             (\groupId group ->
-                if isCorrectDrop model group then
+                if isCorrectDrop pieceSize group then
                     { group
-                        | position = defaultPosition model.pieceSize group.pieces
+                        | position = defaultPosition pieceSize group.pieces
                         , zIndex = 0
                     }
                 else
