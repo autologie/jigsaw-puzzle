@@ -29,7 +29,9 @@ generate sizeX sizeY seed =
             plainPieces sizeX sizeY
 
         trimX x hooks =
-            if x == 0 then
+            if x == 0 && x == sizeX - 1 then
+                { hooks | west = None, east = None }
+            else if x == 0 then
                 { hooks | west = None }
             else if x == sizeX - 1 then
                 { hooks | east = None }
@@ -37,7 +39,9 @@ generate sizeX sizeY seed =
                 hooks
 
         trimY y hooks =
-            if y == 0 then
+            if y == 0 && y == sizeY - 1 then
+                { hooks | north = None, south = None }
+            else if y == 0 then
                 { hooks | north = None }
             else if y == sizeY - 1 then
                 { hooks | south = None }
