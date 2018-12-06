@@ -50,10 +50,10 @@ initialModel : Point -> Seed -> ( Model, Seed )
 initialModel screenSize seed =
     let
         sizeX =
-            100
+            10
 
         sizeY =
-            60
+            6
 
         pieceSize =
             50
