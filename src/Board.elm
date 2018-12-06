@@ -14,7 +14,6 @@ import Random exposing (Seed)
 import Svg exposing (..)
 import Dict exposing (Dict)
 import Html exposing (Html)
-import Html.Attributes
 import Svg.Keyed
 import Svg.Attributes exposing (..)
 import Svg.Events exposing (..)
@@ -39,6 +38,7 @@ type alias Model =
     , pieceSize : Int
     , groups : List PieceGroup.Model
     , selection : Maybe Bounds
+    , tolerance : Float
     }
 
 
@@ -50,10 +50,10 @@ initialModel : Point -> Seed -> ( Model, Seed )
 initialModel screenSize seed =
     let
         sizeX =
-            15
+            10
 
         sizeY =
-            10
+            6
 
         pieceSize =
             50
@@ -67,6 +67,7 @@ initialModel screenSize seed =
           , pieceSize = pieceSize
           , groups = groups
           , selection = Nothing
+          , tolerance = 10
           }
         , updatedSeed
         )
@@ -149,7 +150,7 @@ update msg model =
 
         ( _, Just ( draggingGroup, _ ), EndDragging ) ->
             { model
-                | groups = model.groups |> drop model.pieceSize draggingGroup
+                | groups = model.groups |> drop model.pieceSize model.tolerance draggingGroup
             }
 
         ( Just ( position, _ ), Nothing, MouseMove mousePosition ) ->
@@ -233,7 +234,7 @@ groupZIndex groups group =
 
         addition =
             if isDragged || (group.isSelected && isSelectedGroupDragged groups) then
-                1000
+                (groups |> List.length) + 1
             else
                 0
     in
@@ -325,23 +326,25 @@ defaultPosition pieceSize pieces =
         minIndex |> Point.scale pieceSize
 
 
-isCorrectDrop : Int -> PieceGroup.Model -> Bool
-isCorrectDrop pieceSize group =
+isCorrectDrop : Int -> Float -> PieceGroup.Model -> Bool
+isCorrectDrop pieceSize tolerance group =
     (Point.distance
         group.position
         (defaultPosition pieceSize group.pieces)
     )
-        < 10
+        < tolerance
 
 
-drop : Int -> PieceGroup.Model -> List PieceGroup.Model -> List PieceGroup.Model
-drop pieceSize targetGroup groups =
+drop : Int -> Float -> PieceGroup.Model -> List PieceGroup.Model -> List PieceGroup.Model
+drop pieceSize tolerance targetGroup groups =
     let
         ( mergeableGroups, restGroups ) =
             groups
                 |> List.partition
                     (\group ->
-                        group == targetGroup || isMergeable pieceSize group targetGroup
+                        group
+                            == targetGroup
+                            || isMergeable pieceSize tolerance group targetGroup
                     )
 
         mergedGroupPosition =
@@ -390,7 +393,7 @@ drop pieceSize targetGroup groups =
         (mergedGroup :: restGroups)
             |> List.map
                 (\group ->
-                    if isCorrectDrop pieceSize group then
+                    if isCorrectDrop pieceSize tolerance group then
                         { group
                             | position = defaultPosition pieceSize group.pieces
                             , zIndex = 0
@@ -407,8 +410,8 @@ drop pieceSize targetGroup groups =
                 )
 
 
-isMergeable : Int -> PieceGroup.Model -> PieceGroup.Model -> Bool
-isMergeable pieceSize group anotherGroup =
+isMergeable : Int -> Float -> PieceGroup.Model -> PieceGroup.Model -> Bool
+isMergeable pieceSize tolerance group anotherGroup =
     group.pieces
         |> Dict.toList
         |> List.any
@@ -420,7 +423,7 @@ isMergeable pieceSize group anotherGroup =
                             |> Point.add group.position
 
                     isNear p =
-                        Point.distance position p < 10
+                        Point.distance position p < tolerance
 
                     isAdjacentToPiece anotherPieceOffset (Piece anotherPieceIndex _) =
                         let
