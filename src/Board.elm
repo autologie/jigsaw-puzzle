@@ -50,10 +50,10 @@ initialModel : Point -> Seed -> ( Model, Seed )
 initialModel screenSize seed =
     let
         sizeX =
-            10
+            100
 
         sizeY =
-            6
+            60
 
         pieceSize =
             50
@@ -88,21 +88,18 @@ view { offset, sizeX, sizeY, pieceSize, groups, selection } =
         )
         [ Svg.Keyed.node "g"
             [ transform ("translate" ++ (Point.toString offset)) ]
-            (List.concat
-                [ [ ( "board"
-                    , rect
-                        [ Svg.Attributes.style "fill: #eee;"
-                        , width (String.fromInt (sizeX * pieceSize))
-                        , height (String.fromInt (sizeY * pieceSize))
-                        ]
-                        []
-                    )
-                  ]
-                , (groups
-                    |> List.sortBy (groupZIndex groups)
-                    |> List.map (groupView pieceSize)
-                  )
+            (( "board"
+             , rect
+                [ Svg.Attributes.style "fill: #eee;"
+                , width (String.fromInt (sizeX * pieceSize))
+                , height (String.fromInt (sizeY * pieceSize))
                 ]
+                []
+             )
+                :: (groups
+                        |> List.sortBy (\{ zIndex } -> zIndex)
+                        |> List.map (groupView pieceSize)
+                   )
             )
         ]
 
@@ -165,16 +162,6 @@ groupView pieceSize group =
         )
             |> Svg.map toMsg
             |> (\element -> ( PieceGroup.id group, element ))
-
-
-groupZIndex : List PieceGroup.Model -> PieceGroup.Model -> Int
-groupZIndex groups group =
-    group.zIndex
-        + (if isDragging groups group then
-            (groups |> List.length) + 1
-           else
-            0
-          )
 
 
 isDragging : List PieceGroup.Model -> PieceGroup.Model -> Bool
@@ -263,17 +250,36 @@ updateOnStartSelection touchPosition model =
 
 updateOnStartDragging : PieceGroup.Model -> Point -> Model -> Model
 updateOnStartDragging targetGroup touchPosition model =
-    model
-        |> withGroupsUpdated
-            (\group ->
-                { group
-                    | dragHandle =
-                        if PieceGroup.isSame group targetGroup then
-                            Just touchPosition
+    let
+        maxZIndex =
+            model.groups
+                |> List.map (\{ zIndex } -> zIndex)
+                |> List.maximum
+                |> Maybe.withDefault targetGroup.zIndex
+
+        assignHandle group =
+            { group
+                | dragHandle =
+                    if PieceGroup.isSame group targetGroup then
+                        Just touchPosition
+                    else
+                        Nothing
+            }
+
+        groupsWithHandle =
+            model.groups |> List.map assignHandle
+
+        updatedGroups =
+            groupsWithHandle
+                |> List.map
+                    (\group ->
+                        if isDragging groupsWithHandle group then
+                            { group | zIndex = group.zIndex + maxZIndex + 1 }
                         else
-                            Nothing
-                }
-            )
+                            group
+                    )
+    in
+        { model | groups = updatedGroups }
 
 
 updateOnSelectionChange : Bounds -> Model -> Model
@@ -321,6 +327,12 @@ updateOnEndSelection selection model =
 updateOnEndDragging : PieceGroup.Model -> Model -> Model
 updateOnEndDragging targetGroup ({ pieceSize, tolerance, groups } as model) =
     let
+        minZIndex =
+            model.groups
+                |> List.map (\{ zIndex } -> zIndex)
+                |> List.minimum
+                |> Maybe.withDefault targetGroup.zIndex
+
         ( mergeableGroups, restGroups ) =
             groups
                 |> List.partition
@@ -350,6 +362,7 @@ updateOnEndDragging targetGroup ({ pieceSize, tolerance, groups } as model) =
                         { group
                             | dragHandle = Nothing
                             , isSelected = False
+                            , zIndex = group.zIndex - minZIndex
                         }
                     )
     in
