@@ -150,7 +150,7 @@ update msg model =
 
         ( _, Just ( draggingGroup, _ ), EndDragging ) ->
             { model
-                | groups = model.groups |> drop model.pieceSize model.tolerance draggingGroup
+                | groups = model.groups |> attemptToMerge model.pieceSize model.tolerance draggingGroup
             }
 
         ( Just ( position, _ ), Nothing, MouseMove mousePosition ) ->
@@ -163,7 +163,7 @@ update msg model =
                 { model | selection = Just selection }
                     |> withGroupsUpdated
                         (\group ->
-                            { group | isSelected = isSelected selection model.pieceSize group }
+                            { group | isSelected = isInSelection selection model.pieceSize group }
                         )
 
         ( _, Just ( draggingGroup, touchPosition ), MouseMove mousePosition ) ->
@@ -174,20 +174,9 @@ update msg model =
                         |> Point.sub mousePosition
                         |> Point.add draggingGroup.position
 
-                isDraggingSelectedGroup =
-                    isSelectedGroupDragged model.groups
-
                 updatePosition group =
-                    if
-                        group
-                            == draggingGroup
-                            || (isDraggingSelectedGroup && group.isSelected)
-                    then
-                        { group
-                            | position =
-                                group.position
-                                    |> Point.sub offsetPosition
-                        }
+                    if isDragging model.groups group then
+                        { group | position = group.position |> Point.sub offsetPosition }
                     else
                         group
             in
@@ -197,7 +186,7 @@ update msg model =
             { model | selection = Nothing }
                 |> withGroupsUpdated
                     (\group ->
-                        { group | isSelected = isSelected selection model.pieceSize group }
+                        { group | isSelected = isInSelection selection model.pieceSize group }
                     )
 
         _ ->
@@ -226,33 +215,28 @@ groupView pieceSize group =
 
 groupZIndex : List PieceGroup.Model -> PieceGroup.Model -> Int
 groupZIndex groups group =
+    group.zIndex
+        + (if isDragging groups group then
+            (groups |> List.length) + 1
+           else
+            0
+          )
+
+
+isDragging : List PieceGroup.Model -> PieceGroup.Model -> Bool
+isDragging groups group =
     let
-        isDragged =
-            group.dragHandle
-                |> Maybe.map (\_ -> True)
-                |> Maybe.withDefault False
+        isSelectedAndDragged { dragHandle, isSelected } =
+            case ( dragHandle, isSelected ) of
+                ( Just _, True ) ->
+                    True
 
-        addition =
-            if isDragged || (group.isSelected && isSelectedGroupDragged groups) then
-                (groups |> List.length) + 1
-            else
-                0
+                _ ->
+                    False
     in
-        group.zIndex + addition
-
-
-isSelectedGroupDragged : List PieceGroup.Model -> Bool
-isSelectedGroupDragged groups =
-    groups
-        |> List.any
-            (\group ->
-                case ( group.dragHandle, group.isSelected ) of
-                    ( Just _, True ) ->
-                        True
-
-                    _ ->
-                        False
-            )
+        group.dragHandle
+            |> Maybe.map (\_ -> True)
+            |> Maybe.withDefault (group.isSelected && (groups |> List.any isSelectedAndDragged))
 
 
 decodeMouseEvent : Decode.Decoder Point
@@ -262,8 +246,8 @@ decodeMouseEvent =
         (Decode.at [ "offsetY" ] Decode.int)
 
 
-isSelected : Bounds -> Int -> PieceGroup.Model -> Bool
-isSelected ( from, to ) pieceSize { pieces, position } =
+isInSelection : Bounds -> Int -> PieceGroup.Model -> Bool
+isInSelection ( from, to ) pieceSize { pieces, position } =
     let
         ( minSelectionX, minSelectionY ) =
             Point.min from to
@@ -335,8 +319,8 @@ isCorrectDrop pieceSize tolerance group =
         < tolerance
 
 
-drop : Int -> Float -> PieceGroup.Model -> List PieceGroup.Model -> List PieceGroup.Model
-drop pieceSize tolerance targetGroup groups =
+attemptToMerge : Int -> Float -> PieceGroup.Model -> List PieceGroup.Model -> List PieceGroup.Model
+attemptToMerge pieceSize tolerance targetGroup groups =
     let
         ( mergeableGroups, restGroups ) =
             groups
@@ -435,21 +419,12 @@ isMergeable pieceSize tolerance group anotherGroup =
                             diffOfIndex =
                                 pieceIndex |> Point.sub anotherPieceIndex
                         in
-                            case Point.toString diffOfIndex of
-                                "(0,1)" ->
-                                    isNear (Point.add anotherPosition ( 0, pieceSize ))
-
-                                "(0,-1)" ->
-                                    isNear (Point.add anotherPosition ( 0, -pieceSize ))
-
-                                "(1,0)" ->
-                                    isNear (Point.add anotherPosition ( pieceSize, 0 ))
-
-                                "(-1,0)" ->
-                                    isNear (Point.add anotherPosition ( -pieceSize, 0 ))
-
-                                _ ->
-                                    False
+                            (List.member diffOfIndex [ ( 0, 1 ), ( 0, -1 ), ( 1, 0 ), ( -1, 0 ) ])
+                                && (diffOfIndex
+                                        |> Point.scale pieceSize
+                                        |> Point.add anotherPosition
+                                        |> isNear
+                                   )
                 in
                     anotherGroup.pieces
                         |> Dict.filter isAdjacentToPiece
