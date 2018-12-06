@@ -22,7 +22,7 @@ type Msg
 type alias Model =
     { windowSize : Point
     , seed : Random.Seed
-    , gamePlayModel : Board.Model
+    , board : Board.Model
     }
 
 
@@ -38,14 +38,14 @@ main =
 initialModel : ( Int, Int ) -> Model
 initialModel windowSize =
     let
-        ( gamePlayModel, seed ) =
+        ( board, seed ) =
             Board.initialModel
                 windowSize
                 (Random.initialSeed 0)
     in
         { windowSize = windowSize
         , seed = seed
-        , gamePlayModel = gamePlayModel
+        , board = board
         }
 
 
@@ -54,7 +54,7 @@ view model =
     { title = ""
     , body =
         [ Html.div []
-            [ Board.view model.gamePlayModel |> Html.map BoardMsg
+            [ Board.view model.board |> Html.map BoardMsg
             , Html.div [ Html.Attributes.class "control" ]
                 [ Html.button [ onClick Scatter ] [ Html.text "Scatter" ]
                 , Html.button [ onClick Reset ] [ Html.text "New Puzzle" ]
@@ -69,36 +69,36 @@ update msg model =
     case msg of
         BoardMsg gamePlayMsg ->
             { model
-                | gamePlayModel = Board.update gamePlayMsg model.gamePlayModel
+                | board = Board.update gamePlayMsg model.board
             }
 
         Reset ->
             let
-                ( gamePlayModel, seed ) =
+                ( board, seed ) =
                     Board.initialModel
                         model.windowSize
                         model.seed
             in
                 { model
                     | seed = seed
-                    , gamePlayModel = gamePlayModel
+                    , board = board
                 }
 
         Scatter ->
             let
-                ( gamePlayModel, seed ) =
-                    model.gamePlayModel |> Board.scatterPieces model.seed
+                ( board, seed ) =
+                    model.board |> Board.scatterPieces model.seed
             in
                 { model
                     | seed = seed
-                    , gamePlayModel = gamePlayModel
+                    , board = board
                 }
 
         ResizeWindow size ->
             let
-                gamePlayModel =
-                    model.gamePlayModel |> Board.withScreenSize size
+                board =
+                    model.board |> Board.withScreenSize size
             in
                 { model
-                    | gamePlayModel = gamePlayModel
+                    | board = board
                 }
