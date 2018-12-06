@@ -38,9 +38,7 @@ type alias Model =
     , sizeY : Int
     , pieceSize : Int
     , groups : Dict GroupId PieceGroup.Model
-    , dragging : Maybe ( GroupId, Point )
     , selection : Maybe Bounds
-    , selectedGroups : List GroupId
     }
 
 
@@ -72,16 +70,14 @@ initialModel screenSize seed =
           , sizeY = sizeY
           , pieceSize = pieceSize
           , groups = groups
-          , dragging = Nothing
           , selection = Nothing
-          , selectedGroups = []
           }
         , updatedSeed
         )
 
 
 view : Model -> Html Msg
-view { offset, sizeX, sizeY, pieceSize, groups, dragging, selection, selectedGroups } =
+view { offset, sizeX, sizeY, pieceSize, groups, selection } =
     svg
         ([ width "100vw"
          , height "100vh"
@@ -108,8 +104,8 @@ view { offset, sizeX, sizeY, pieceSize, groups, dragging, selection, selectedGro
                   ]
                 , (groups
                     |> Dict.toList
-                    |> List.sortBy (groupZIndex dragging selectedGroups)
-                    |> List.map (groupView pieceSize selectedGroups)
+                    |> List.sortBy (groupZIndex (groups |> Dict.values))
+                    |> List.map (groupView pieceSize)
                   )
                 ]
             )
@@ -118,10 +114,37 @@ view { offset, sizeX, sizeY, pieceSize, groups, dragging, selection, selectedGro
 
 update : Msg -> Model -> Model
 update msg model =
-    case ( model.selection, model.dragging, msg ) of
+    case
+        ( model.selection
+        , model.groups
+            |> Dict.values
+            |> List.filterMap
+                (\group ->
+                    case group.dragHandle of
+                        Just handle ->
+                            Just ( group, handle )
+
+                        Nothing ->
+                            Nothing
+                )
+            |> List.head
+        , msg
+        )
+    of
         ( _, Nothing, StartDragging targetGroupId touchPosition ) ->
             { model
-                | dragging = Just ( targetGroupId, touchPosition )
+                | groups =
+                    model.groups
+                        |> Dict.map
+                            (\id group ->
+                                { group
+                                    | dragHandle =
+                                        if id == targetGroupId then
+                                            Just touchPosition
+                                        else
+                                            Nothing
+                                }
+                            )
             }
 
         ( _, Nothing, StartSelection touchPosition ) ->
@@ -133,13 +156,11 @@ update msg model =
                     | selection = Just ( selectPosition, selectPosition )
                 }
 
-        ( _, Just ( targetGroupId, _ ), EndDragging ) ->
+        ( _, Just ( draggingGroup, _ ), EndDragging ) ->
             { model
-                | dragging = Nothing
-                , groups =
+                | groups =
                     model.groups
-                        |> updateGroupsOnDrop model.pieceSize targetGroupId
-                , selectedGroups = []
+                        |> updateGroupsOnDrop model.pieceSize draggingGroup
             }
 
         ( Just ( position, _ ), Nothing, MouseMove mousePosition ) ->
@@ -148,65 +169,73 @@ update msg model =
                     ( position
                     , mousePosition |> Point.sub model.offset
                     )
+
+                selectedGroups =
+                    model.groups
+                        |> getSelection selection model.pieceSize
             in
                 { model
                     | selection = Just selection
-                    , selectedGroups =
+                    , groups =
                         model.groups
-                            |> getSelection selection model.pieceSize
+                            |> Dict.map
+                                (\id group ->
+                                    { group | isSelected = List.member id selectedGroups }
+                                )
                 }
 
-        ( _, Just ( draggingGroupId, touchPosition ), MouseMove mousePosition ) ->
-            case Dict.get draggingGroupId model.groups of
-                Just { position } ->
-                    let
-                        offsetPosition =
-                            Point.origin
-                                |> Point.add touchPosition
-                                |> Point.sub mousePosition
-                                |> Point.add position
+        ( _, Just ( draggingGroup, touchPosition ), MouseMove mousePosition ) ->
+            let
+                offsetPosition =
+                    Point.origin
+                        |> Point.add touchPosition
+                        |> Point.sub mousePosition
+                        |> Point.add draggingGroup.position
 
-                        isDraggingSelectedGroup =
-                            List.member draggingGroupId model.selectedGroups
+                isDraggingSelectedGroup =
+                    isSelectedGroupDragged (model.groups |> Dict.values)
 
-                        updatePosition groupId group =
-                            if
-                                (groupId == draggingGroupId)
-                                    || (isDraggingSelectedGroup
-                                            && List.member groupId model.selectedGroups
-                                       )
-                            then
-                                { group
-                                    | position =
-                                        group.position
-                                            |> Point.sub offsetPosition
-                                }
-                            else
-                                group
-                    in
-                        { model
-                            | groups =
-                                model.groups
-                                    |> Dict.map updatePosition
+                updatePosition _ group =
+                    if
+                        (group == draggingGroup)
+                            || (isDraggingSelectedGroup && group.isSelected)
+                    then
+                        { group
+                            | position =
+                                group.position
+                                    |> Point.sub offsetPosition
                         }
-
-                Nothing ->
-                    model
+                    else
+                        group
+            in
+                { model
+                    | groups =
+                        model.groups
+                            |> Dict.map updatePosition
+                }
 
         ( _, Nothing, EndSelection selection ) ->
-            { model
-                | selection = Nothing
-                , selectedGroups =
+            let
+                selectedGroups =
                     model.groups
                         |> getSelection selection model.pieceSize
-            }
+            in
+                { model
+                    | selection = Nothing
+                    , groups =
+                        model.groups
+                            |> Dict.map
+                                (\id group ->
+                                    { group | isSelected = List.member id selectedGroups }
+                                )
+                }
 
         _ ->
             model
 
 
-groupView : Int -> List GroupId -> ( GroupId, PieceGroup.Model ) -> ( String, Svg.Svg Msg )
-groupView pieceSize selectedGroups ( groupId, group ) =
+groupView : Int -> ( GroupId, PieceGroup.Model ) -> ( String, Svg.Svg Msg )
+groupView pieceSize ( groupId, group ) =
     let
         toMsg msg =
             case msg of
@@ -215,36 +244,45 @@ groupView pieceSize selectedGroups ( groupId, group ) =
 
                 PieceGroup.EndDragging ->
                     EndDragging
-
-        isSelected =
-            List.member groupId selectedGroups
     in
-        (Lazy.lazy3
+        (Lazy.lazy2
             PieceGroup.view
             pieceSize
-            isSelected
             group
         )
             |> Svg.map toMsg
             |> (\element -> ( String.fromInt groupId, element ))
 
 
-groupZIndex : Maybe ( GroupId, a ) -> List GroupId -> ( GroupId, PieceGroup.Model ) -> Int
-groupZIndex dragging selectedGroups ( groupId, group ) =
-    dragging
-        |> Maybe.andThen
-            (\( id, _ ) ->
-                if
-                    (id == groupId)
-                        || (List.member id selectedGroups
-                                && List.member groupId selectedGroups
-                           )
-                then
-                    Just 1000
-                else
-                    Nothing
+groupZIndex : List PieceGroup.Model -> ( a, PieceGroup.Model ) -> Int
+groupZIndex groups ( _, group ) =
+    let
+        isDragged =
+            group.dragHandle
+                |> Maybe.map (\_ -> True)
+                |> Maybe.withDefault False
+
+        addition =
+            if isDragged || (group.isSelected && isSelectedGroupDragged groups) then
+                1000
+            else
+                0
+    in
+        group.zIndex + addition
+
+
+isSelectedGroupDragged : List PieceGroup.Model -> Bool
+isSelectedGroupDragged groups =
+    groups
+        |> List.any
+            (\{ dragHandle, isSelected } ->
+                case ( dragHandle, isSelected ) of
+                    ( Just _, True ) ->
+                        True
+
+                    _ ->
+                        False
             )
-        |> Maybe.withDefault group.zIndex
 
 
 decodeMouseEvent : Decode.Decoder Point
@@ -301,6 +339,8 @@ generateGroups sizeX sizeY pieceSize seed =
             { pieces = pieceMap
             , zIndex = 0
             , position = defaultPosition pieceSize pieceMap
+            , dragHandle = Nothing
+            , isSelected = False
             }
         , nextSeed
         )
@@ -332,81 +372,83 @@ isCorrectDrop pieceSize group =
         < 10
 
 
-updateGroupsOnDrop : Int -> GroupId -> Dict GroupId PieceGroup.Model -> Dict GroupId PieceGroup.Model
-updateGroupsOnDrop pieceSize targetGroupId groups =
-    Dict.get targetGroupId groups
-        |> Maybe.map
-            (\targetGroup ->
-                let
-                    ( mergeableGroups, restGroups ) =
-                        groups
-                            |> Dict.partition
-                                (\groupId group ->
-                                    groupId == targetGroupId || isMergeable pieceSize group targetGroup
-                                )
+updateGroupsOnDrop : Int -> PieceGroup.Model -> Dict GroupId PieceGroup.Model -> Dict GroupId PieceGroup.Model
+updateGroupsOnDrop pieceSize targetGroup groups =
+    let
+        ( mergeableGroups, restGroups ) =
+            groups
+                |> Dict.partition
+                    (\_ group ->
+                        group == targetGroup || isMergeable pieceSize group targetGroup
+                    )
 
-                    mergeableGroupList =
-                        mergeableGroups
-                            |> Dict.toList
+        mergeableGroupList =
+            mergeableGroups
+                |> Dict.toList
 
-                    ( mergedGroupId, mergedGroupPosition ) =
-                        mergeableGroupList
-                            |> List.foldl
-                                (\( groupId, { position } ) ( passedGroupId, passedPosition ) ->
-                                    ( Basics.min passedGroupId groupId
-                                    , Point.min position passedPosition
-                                    )
-                                )
-                                ( targetGroupId, targetGroup.position )
+        ( mergedGroupId, mergedGroupPosition ) =
+            mergeableGroupList
+                |> List.foldl
+                    (\( groupId, { position } ) ( passedGroupId, passedPosition ) ->
+                        ( Basics.max passedGroupId groupId
+                        , Point.min position passedPosition
+                        )
+                    )
+                    ( 0, targetGroup.position )
 
-                    mergedGroup =
-                        { pieces =
-                            mergeableGroupList
-                                |> List.foldl
-                                    (\( _, { position, pieces } ) passed ->
-                                        let
-                                            groupPosition =
-                                                position
-                                                    |> Point.sub mergedGroupPosition
-                                                    |> Point.divideRound pieceSize
+        mergedGroup =
+            { pieces =
+                mergeableGroupList
+                    |> List.foldl
+                        (\( _, { position, pieces } ) passed ->
+                            let
+                                groupPosition =
+                                    position
+                                        |> Point.sub mergedGroupPosition
+                                        |> Point.divideRound pieceSize
 
-                                            updatedPieces =
-                                                pieces
-                                                    |> Dict.toList
-                                                    |> List.map
-                                                        (\( piecePosition, piece ) ->
-                                                            ( piecePosition
-                                                                |> Point.add groupPosition
-                                                            , piece
-                                                            )
-                                                        )
-                                                    |> Dict.fromList
-                                        in
-                                            Dict.union passed updatedPieces
-                                    )
-                                    Dict.empty
-                        , position = mergedGroupPosition
-                        , zIndex =
-                            groups
-                                |> Dict.toList
-                                |> List.map (\( _, { zIndex } ) -> zIndex + 1)
-                                |> List.maximum
-                                |> Maybe.withDefault 0
+                                updatedPieces =
+                                    pieces
+                                        |> Dict.toList
+                                        |> List.map
+                                            (\( piecePosition, piece ) ->
+                                                ( piecePosition
+                                                    |> Point.add groupPosition
+                                                , piece
+                                                )
+                                            )
+                                        |> Dict.fromList
+                            in
+                                Dict.union passed updatedPieces
+                        )
+                        Dict.empty
+            , position = mergedGroupPosition
+            , zIndex =
+                groups
+                    |> Dict.toList
+                    |> List.map (\( _, { zIndex } ) -> zIndex + 1)
+                    |> List.maximum
+                    |> Maybe.withDefault 0
+            , isSelected = False
+            , dragHandle = Nothing
+            }
+    in
+        Dict.insert mergedGroupId mergedGroup restGroups
+            |> Dict.map
+                (\groupId group ->
+                    if isCorrectDrop pieceSize group then
+                        { group
+                            | position = defaultPosition pieceSize group.pieces
+                            , zIndex = 0
+                            , dragHandle = Nothing
+                            , isSelected = False
                         }
-                in
-                    Dict.insert mergedGroupId mergedGroup restGroups
-            )
-        |> Maybe.withDefault groups
-        |> Dict.map
-            (\groupId group ->
-                if isCorrectDrop pieceSize group then
-                    { group
-                        | position = defaultPosition pieceSize group.pieces
-                        , zIndex = 0
-                    }
-                else
-                    group
-            )
+                    else
+                        { group
+                            | dragHandle = Nothing
+                            , isSelected = False
+                        }
+                )
 
 
 isMergeable : Int -> PieceGroup.Model -> PieceGroup.Model -> Bool
@@ -473,6 +515,8 @@ scatterPieces initialSeed model =
                     { pieces = Dict.singleton Point.origin piece
                     , position = ( x, y )
                     , zIndex = 0
+                    , dragHandle = Nothing
+                    , isSelected = False
                     }
                     passed
                 , index + 1

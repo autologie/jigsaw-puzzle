@@ -23,11 +23,13 @@ type alias Model =
     { pieces : Dict Point Piece
     , position : Point
     , zIndex : Int
+    , dragHandle : Maybe Point
+    , isSelected : Bool
     }
 
 
-view : Int -> Bool -> Model -> Svg Msg
-view pieceSize isSelected group =
+view : Int -> Model -> Svg Msg
+view pieceSize group =
     let
         toMsg msg =
             case msg of
@@ -40,7 +42,7 @@ view pieceSize isSelected group =
         g
             [ transform ("translate" ++ (Point.toString group.position)) ]
             (group.pieces
-                |> Dict.map (Lazy.lazy4 Piece.view pieceSize isSelected)
+                |> Dict.map (Lazy.lazy4 Piece.view pieceSize group.isSelected)
                 |> Dict.values
                 |> List.map (Html.map toMsg)
             )
