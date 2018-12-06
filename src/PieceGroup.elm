@@ -1,4 +1,4 @@
-module PieceGroup exposing (Model, Msg(..), view, id, isSame)
+module PieceGroup exposing (Model, Msg(..), view, id, isSame, defaultPosition)
 
 import Json.Decode as Decode exposing (Decoder)
 import Random exposing (Seed)
@@ -67,3 +67,20 @@ isSame one another =
                 |> Set.fromList
     in
         pointSet one == pointSet another
+
+
+defaultPosition : Int -> Model -> Point
+defaultPosition pieceSize { pieces } =
+    let
+        minIndex =
+            case pieces |> Dict.values of
+                (Piece headIndex _) :: tail ->
+                    List.foldl
+                        (\(Piece index _) passed -> Point.min index passed)
+                        headIndex
+                        tail
+
+                _ ->
+                    Point.origin
+    in
+        minIndex |> Point.scale pieceSize

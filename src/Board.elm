@@ -78,7 +78,6 @@ view { offset, sizeX, sizeY, pieceSize, groups, selection } =
     svg
         ([ width "100vw"
          , height "100vh"
-         , viewBox "0 0 100vw 100vh"
          , on "mousemove" (Decode.map MouseMove decodeMouseEvent)
          , on "mousedown" (Decode.map (\position -> StartSelection position) decodeMouseEvent)
          ]
@@ -127,67 +126,22 @@ update msg model =
         )
     of
         ( _, Nothing, StartDragging targetGroup touchPosition ) ->
-            model
-                |> withGroupsUpdated
-                    (\group ->
-                        { group
-                            | dragHandle =
-                                if PieceGroup.isSame group targetGroup then
-                                    Just touchPosition
-                                else
-                                    Nothing
-                        }
-                    )
+            updateOnStartDragging targetGroup touchPosition model
 
         ( _, Nothing, StartSelection touchPosition ) ->
-            let
-                selectPosition =
-                    touchPosition |> Point.sub model.offset
-            in
-                { model
-                    | selection = Just ( selectPosition, selectPosition )
-                }
+            updateOnStartSelection touchPosition model
 
         ( _, Just ( draggingGroup, _ ), EndDragging ) ->
-            { model
-                | groups = model.groups |> attemptToMerge model.pieceSize model.tolerance draggingGroup
-            }
+            updateOnEndDragging draggingGroup model
 
         ( Just ( position, _ ), Nothing, MouseMove mousePosition ) ->
-            let
-                selection =
-                    ( position
-                    , mousePosition |> Point.sub model.offset
-                    )
-            in
-                { model | selection = Just selection }
-                    |> withGroupsUpdated
-                        (\group ->
-                            { group | isSelected = isInSelection selection model.pieceSize group }
-                        )
+            updateOnSelectionChange ( position, mousePosition ) model
 
         ( _, Just ( draggingGroup, touchPosition ), MouseMove mousePosition ) ->
-            let
-                offsetPosition =
-                    Point.origin
-                        |> Point.add touchPosition
-                        |> Point.sub mousePosition
-                        |> Point.add draggingGroup.position
-
-                updatePosition group =
-                    if isDragging model.groups group then
-                        { group | position = group.position |> Point.sub offsetPosition }
-                    else
-                        group
-            in
-                model |> withGroupsUpdated updatePosition
+            updateOnDrag draggingGroup touchPosition mousePosition model
 
         ( _, Nothing, EndSelection selection ) ->
-            { model | selection = Nothing }
-                |> withGroupsUpdated
-                    (\group ->
-                        { group | isSelected = isInSelection selection model.pieceSize group }
-                    )
+            updateOnEndSelection selection model
 
         _ ->
             model
@@ -281,46 +235,91 @@ generateGroups sizeX sizeY pieceSize seed =
             pieces
                 |> List.map (\((Piece index hooks) as piece) -> ( index, piece ))
                 |> Dict.fromList
-    in
-        ( [ { pieces = pieceMap
+
+        group =
+            { pieces = pieceMap
             , zIndex = 0
-            , position = defaultPosition pieceSize pieceMap
+            , position = Point.origin
             , dragHandle = Nothing
             , isSelected = False
             }
+    in
+        ( [ { group | position = PieceGroup.defaultPosition pieceSize group }
           ]
         , nextSeed
         )
 
 
-defaultPosition : Int -> Dict Point Piece -> Point
-defaultPosition pieceSize pieces =
+updateOnStartSelection : Point -> Model -> Model
+updateOnStartSelection touchPosition model =
     let
-        minIndex =
-            case pieces |> Dict.values of
-                (Piece headIndex _) :: tail ->
-                    List.foldl
-                        (\(Piece index _) passed -> Point.min index passed)
-                        headIndex
-                        tail
-
-                _ ->
-                    Point.origin
+        selectPosition =
+            touchPosition |> Point.sub model.offset
     in
-        minIndex |> Point.scale pieceSize
+        { model
+            | selection = Just ( selectPosition, selectPosition )
+        }
 
 
-isCorrectDrop : Int -> Float -> PieceGroup.Model -> Bool
-isCorrectDrop pieceSize tolerance group =
-    (Point.distance
-        group.position
-        (defaultPosition pieceSize group.pieces)
-    )
-        < tolerance
+updateOnStartDragging : PieceGroup.Model -> Point -> Model -> Model
+updateOnStartDragging targetGroup touchPosition model =
+    model
+        |> withGroupsUpdated
+            (\group ->
+                { group
+                    | dragHandle =
+                        if PieceGroup.isSame group targetGroup then
+                            Just touchPosition
+                        else
+                            Nothing
+                }
+            )
 
 
-attemptToMerge : Int -> Float -> PieceGroup.Model -> List PieceGroup.Model -> List PieceGroup.Model
-attemptToMerge pieceSize tolerance targetGroup groups =
+updateOnSelectionChange : Bounds -> Model -> Model
+updateOnSelectionChange ( position, mousePosition ) model =
+    let
+        selection =
+            ( position
+            , mousePosition |> Point.sub model.offset
+            )
+    in
+        { model | selection = Just selection }
+            |> withGroupsUpdated
+                (\group ->
+                    { group | isSelected = isInSelection selection model.pieceSize group }
+                )
+
+
+updateOnDrag : PieceGroup.Model -> Point -> Point -> Model -> Model
+updateOnDrag draggingGroup initialTouchPosition mousePosition model =
+    let
+        offsetPosition =
+            Point.origin
+                |> Point.add initialTouchPosition
+                |> Point.sub mousePosition
+                |> Point.add draggingGroup.position
+
+        updatePosition group =
+            if isDragging model.groups group then
+                { group | position = group.position |> Point.sub offsetPosition }
+            else
+                group
+    in
+        model |> withGroupsUpdated updatePosition
+
+
+updateOnEndSelection : Bounds -> Model -> Model
+updateOnEndSelection selection model =
+    { model | selection = Nothing }
+        |> withGroupsUpdated
+            (\group ->
+                { group | isSelected = isInSelection selection model.pieceSize group }
+            )
+
+
+updateOnEndDragging : PieceGroup.Model -> Model -> Model
+updateOnEndDragging targetGroup ({ pieceSize, tolerance, groups } as model) =
     let
         ( mergeableGroups, restGroups ) =
             groups
@@ -373,25 +372,37 @@ attemptToMerge pieceSize tolerance targetGroup groups =
             , isSelected = False
             , dragHandle = Nothing
             }
-    in
-        (mergedGroup :: restGroups)
-            |> List.map
-                (\group ->
-                    if isCorrectDrop pieceSize tolerance group then
+
+        updatedGroups =
+            (mergedGroup :: restGroups)
+                |> List.map
+                    (\group ->
+                        if isCorrectDrop pieceSize tolerance group then
+                            { group
+                                | position = PieceGroup.defaultPosition pieceSize group
+                                , zIndex = 0
+                            }
+                        else
+                            group
+                    )
+                |> List.map
+                    (\group ->
                         { group
-                            | position = defaultPosition pieceSize group.pieces
-                            , zIndex = 0
+                            | dragHandle = Nothing
+                            , isSelected = False
                         }
-                    else
-                        group
-                )
-            |> List.map
-                (\group ->
-                    { group
-                        | dragHandle = Nothing
-                        , isSelected = False
-                    }
-                )
+                    )
+    in
+        { model | groups = updatedGroups }
+
+
+isCorrectDrop : Int -> Float -> PieceGroup.Model -> Bool
+isCorrectDrop pieceSize tolerance group =
+    (Point.distance
+        group.position
+        (PieceGroup.defaultPosition pieceSize group)
+    )
+        < tolerance
 
 
 isMergeable : Int -> Float -> PieceGroup.Model -> PieceGroup.Model -> Bool
