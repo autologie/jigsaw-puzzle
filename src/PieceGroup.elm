@@ -1,4 +1,14 @@
-module PieceGroup exposing (Model, Msg(..), view, id, isSame, defaultPosition, merge)
+module PieceGroup
+    exposing
+        ( Model
+        , Msg(..)
+        , view
+        , id
+        , isSame
+        , defaultPosition
+        , merge
+        , isMergeable
+        )
 
 import Json.Decode as Decode exposing (Decoder)
 import Random exposing (Seed)
@@ -130,3 +140,42 @@ merge pieceSize group otherGroups =
         , isSelected = False
         , dragHandle = Nothing
         }
+
+
+isMergeable : Int -> Float -> Model -> Model -> Bool
+isMergeable pieceSize tolerance group anotherGroup =
+    group.pieces
+        |> Dict.toList
+        |> List.any
+            (\( pieceOffset, Piece pieceIndex _ ) ->
+                let
+                    position =
+                        pieceOffset
+                            |> Point.scale pieceSize
+                            |> Point.add group.position
+
+                    isNear p =
+                        Point.distance position p < tolerance
+
+                    isAdjacentToPiece anotherPieceOffset (Piece anotherPieceIndex _) =
+                        let
+                            anotherPosition =
+                                anotherPieceOffset
+                                    |> Point.scale pieceSize
+                                    |> Point.add anotherGroup.position
+
+                            diffOfIndex =
+                                pieceIndex |> Point.sub anotherPieceIndex
+                        in
+                            (List.member diffOfIndex [ ( 0, 1 ), ( 0, -1 ), ( 1, 0 ), ( -1, 0 ) ])
+                                && (diffOfIndex
+                                        |> Point.scale pieceSize
+                                        |> Point.add anotherPosition
+                                        |> isNear
+                                   )
+                in
+                    anotherGroup.pieces
+                        |> Dict.filter isAdjacentToPiece
+                        |> Dict.isEmpty
+                        |> not
+            )

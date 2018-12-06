@@ -339,24 +339,15 @@ updateOnEndDragging targetGroup ({ pieceSize, tolerance, groups } as model) =
                     (\group ->
                         group
                             /= targetGroup
-                            && isMergeable pieceSize tolerance group targetGroup
+                            && PieceGroup.isMergeable pieceSize tolerance group targetGroup
                     )
 
         mergedGroup =
             PieceGroup.merge pieceSize targetGroup mergeableGroups
+                |> attemptToSettle pieceSize tolerance minZIndex
 
         updatedGroups =
             (mergedGroup :: (restGroups |> List.filter (\g -> g /= targetGroup)))
-                |> List.map
-                    (\group ->
-                        if isCorrectDrop pieceSize tolerance group then
-                            { group
-                                | position = PieceGroup.defaultPosition pieceSize group
-                                , zIndex = 0
-                            }
-                        else
-                            group
-                    )
                 |> List.map
                     (\group ->
                         { group
@@ -369,52 +360,23 @@ updateOnEndDragging targetGroup ({ pieceSize, tolerance, groups } as model) =
         { model | groups = updatedGroups }
 
 
-isCorrectDrop : Int -> Float -> PieceGroup.Model -> Bool
-isCorrectDrop pieceSize tolerance group =
-    (Point.distance
-        group.position
-        (PieceGroup.defaultPosition pieceSize group)
-    )
-        < tolerance
-
-
-isMergeable : Int -> Float -> PieceGroup.Model -> PieceGroup.Model -> Bool
-isMergeable pieceSize tolerance group anotherGroup =
-    group.pieces
-        |> Dict.toList
-        |> List.any
-            (\( pieceOffset, Piece pieceIndex _ ) ->
-                let
-                    position =
-                        pieceOffset
-                            |> Point.scale pieceSize
-                            |> Point.add group.position
-
-                    isNear p =
-                        Point.distance position p < tolerance
-
-                    isAdjacentToPiece anotherPieceOffset (Piece anotherPieceIndex _) =
-                        let
-                            anotherPosition =
-                                anotherPieceOffset
-                                    |> Point.scale pieceSize
-                                    |> Point.add anotherGroup.position
-
-                            diffOfIndex =
-                                pieceIndex |> Point.sub anotherPieceIndex
-                        in
-                            (List.member diffOfIndex [ ( 0, 1 ), ( 0, -1 ), ( 1, 0 ), ( -1, 0 ) ])
-                                && (diffOfIndex
-                                        |> Point.scale pieceSize
-                                        |> Point.add anotherPosition
-                                        |> isNear
-                                   )
-                in
-                    anotherGroup.pieces
-                        |> Dict.filter isAdjacentToPiece
-                        |> Dict.isEmpty
-                        |> not
+attemptToSettle : Int -> Float -> Int -> PieceGroup.Model -> PieceGroup.Model
+attemptToSettle pieceSize tolerance minZIndex group =
+    let
+        isCorrectDrop =
+            (Point.distance
+                group.position
+                (PieceGroup.defaultPosition pieceSize group)
             )
+                < tolerance
+    in
+        if isCorrectDrop then
+            { group
+                | position = PieceGroup.defaultPosition pieceSize group
+                , zIndex = minZIndex
+            }
+        else
+            group
 
 
 scatterPieces : Seed -> Model -> ( Model, Seed )
