@@ -326,55 +326,15 @@ updateOnEndDragging targetGroup ({ pieceSize, tolerance, groups } as model) =
                 |> List.partition
                     (\group ->
                         group
-                            == targetGroup
-                            || isMergeable pieceSize tolerance group targetGroup
+                            /= targetGroup
+                            && isMergeable pieceSize tolerance group targetGroup
                     )
-
-        mergedGroupPosition =
-            mergeableGroups
-                |> List.foldl
-                    (\{ position } passedPosition ->
-                        Point.min position passedPosition
-                    )
-                    targetGroup.position
-
-        reduceMergeableGroups { position, pieces } passed =
-            let
-                groupPosition =
-                    position
-                        |> Point.sub mergedGroupPosition
-                        |> Point.divideRound pieceSize
-
-                updatedPieces =
-                    pieces
-                        |> Dict.toList
-                        |> List.map
-                            (\( piecePosition, piece ) ->
-                                ( piecePosition
-                                    |> Point.add groupPosition
-                                , piece
-                                )
-                            )
-                        |> Dict.fromList
-            in
-                Dict.union passed updatedPieces
 
         mergedGroup =
-            { pieces =
-                mergeableGroups
-                    |> List.foldl reduceMergeableGroups Dict.empty
-            , position = mergedGroupPosition
-            , zIndex =
-                groups
-                    |> List.map (\{ zIndex } -> zIndex + 1)
-                    |> List.maximum
-                    |> Maybe.withDefault 0
-            , isSelected = False
-            , dragHandle = Nothing
-            }
+            PieceGroup.merge pieceSize targetGroup mergeableGroups
 
         updatedGroups =
-            (mergedGroup :: restGroups)
+            (mergedGroup :: (restGroups |> List.filter (\g -> g /= targetGroup)))
                 |> List.map
                     (\group ->
                         if isCorrectDrop pieceSize tolerance group then

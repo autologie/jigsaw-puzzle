@@ -1,4 +1,4 @@
-module PieceGroup exposing (Model, Msg(..), view, id, isSame, defaultPosition)
+module PieceGroup exposing (Model, Msg(..), view, id, isSame, defaultPosition, merge)
 
 import Json.Decode as Decode exposing (Decoder)
 import Random exposing (Seed)
@@ -84,3 +84,49 @@ defaultPosition pieceSize { pieces } =
                     Point.origin
     in
         minIndex |> Point.scale pieceSize
+
+
+merge : Int -> Model -> List Model -> Model
+merge pieceSize group otherGroups =
+    let
+        mergedGroupPosition =
+            otherGroups
+                |> List.foldl
+                    (\{ position } passedPosition ->
+                        Point.min position passedPosition
+                    )
+                    group.position
+
+        reduceMergeableGroups { position, pieces } passed =
+            let
+                groupPosition =
+                    position
+                        |> Point.sub mergedGroupPosition
+                        |> Point.divideRound pieceSize
+
+                updatedPieces =
+                    pieces
+                        |> Dict.toList
+                        |> List.map
+                            (\( piecePosition, piece ) ->
+                                ( piecePosition
+                                    |> Point.add groupPosition
+                                , piece
+                                )
+                            )
+                        |> Dict.fromList
+            in
+                Dict.union passed updatedPieces
+    in
+        { pieces =
+            (group :: otherGroups)
+                |> List.foldl reduceMergeableGroups Dict.empty
+        , position = mergedGroupPosition
+        , zIndex =
+            otherGroups
+                |> List.map (\{ zIndex } -> zIndex + 1)
+                |> List.maximum
+                |> Maybe.withDefault group.zIndex
+        , isSelected = False
+        , dragHandle = Nothing
+        }
