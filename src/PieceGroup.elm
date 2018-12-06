@@ -1,8 +1,9 @@
-module PieceGroup exposing (Model, Msg(..), view)
+module PieceGroup exposing (Model, Msg(..), view, id, isSame)
 
 import Json.Decode as Decode exposing (Decoder)
 import Random exposing (Seed)
 import Svg exposing (..)
+import Set
 import Dict exposing (Dict)
 import Html exposing (Html)
 import Html.Attributes
@@ -46,3 +47,23 @@ view pieceSize group =
                 |> Dict.values
                 |> List.map (Html.map toMsg)
             )
+
+
+id : Model -> String
+id group =
+    group.pieces
+        |> Dict.values
+        |> List.map (\(Piece point _) -> Point.toString point)
+        |> String.join ","
+
+
+isSame : Model -> Model -> Bool
+isSame one another =
+    let
+        pointSet group =
+            group.pieces
+                |> Dict.values
+                |> List.map (\(Piece point _) -> point)
+                |> Set.fromList
+    in
+        pointSet one == pointSet another
