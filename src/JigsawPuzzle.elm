@@ -2,6 +2,7 @@ module JigsawPuzzle exposing (Piece(..), Hooks, Hook(..), generate)
 
 import Random exposing (Seed)
 import Point exposing (Point)
+import Picture exposing (Picture)
 
 
 type Piece
@@ -22,31 +23,45 @@ type Hook
     | None
 
 
-generate : Int -> Int -> Seed -> ( List Piece, Seed )
-generate sizeX sizeY seed =
+generate : Picture -> Seed -> ( List Piece, Seed )
+generate picture seed =
     let
         plain =
-            plainPieces sizeX sizeY
+            plainPieces picture
 
-        trimX x hooks =
-            if x == 0 && x == sizeX - 1 then
-                { hooks | west = None, east = None }
-            else if x == 0 then
-                { hooks | west = None }
-            else if x == sizeX - 1 then
-                { hooks | east = None }
-            else
-                hooks
+        trimX ( x, y ) hooks =
+            let
+                isWestEnd =
+                    Picture.isVoidAt ( x - 1, y ) picture
 
-        trimY y hooks =
-            if y == 0 && y == sizeY - 1 then
-                { hooks | north = None, south = None }
-            else if y == 0 then
-                { hooks | north = None }
-            else if y == sizeY - 1 then
-                { hooks | south = None }
-            else
-                hooks
+                isEastEnd =
+                    Picture.isVoidAt ( x + 1, y ) picture
+            in
+                if isWestEnd && isEastEnd then
+                    { hooks | west = None, east = None }
+                else if isWestEnd then
+                    { hooks | west = None }
+                else if isEastEnd then
+                    { hooks | east = None }
+                else
+                    hooks
+
+        trimY ( x, y ) hooks =
+            let
+                isNorthEnd =
+                    Picture.isVoidAt ( x, y - 1 ) picture
+
+                isSouthEnd =
+                    Picture.isVoidAt ( x, y + 1 ) picture
+            in
+                if isNorthEnd && isSouthEnd then
+                    { hooks | north = None, south = None }
+                else if isNorthEnd then
+                    { hooks | north = None }
+                else if isSouthEnd then
+                    { hooks | south = None }
+                else
+                    hooks
 
         reducePieces (Piece (( indexX, indexY ) as index) hooks) ( pieces, mySeed ) =
             let
@@ -55,8 +70,8 @@ generate sizeX sizeY seed =
 
                 trimmedHooks =
                     generatedHooks
-                        |> trimX indexX
-                        |> trimY indexY
+                        |> trimX ( indexX, indexY )
+                        |> trimY ( indexX, indexY )
             in
                 ( withHooksAssigned
                     index
@@ -68,21 +83,26 @@ generate sizeX sizeY seed =
         plain |> List.foldl reducePieces ( plain, seed )
 
 
-plainPieces : Int -> Int -> List Piece
-plainPieces sizeX sizeY =
-    List.range 0 (sizeX - 1)
+plainPieces : Picture -> List Piece
+plainPieces picture =
+    List.range 0 (Picture.sizeX picture - 1)
         |> List.concatMap
             (\x ->
-                List.range 0 (sizeY - 1)
-                    |> List.map
+                List.range 0 (Picture.sizeY picture - 1)
+                    |> List.filterMap
                         (\y ->
-                            Piece
-                                ( x, y )
-                                { north = None
-                                , east = None
-                                , south = None
-                                , west = None
-                                }
+                            if Picture.isVoidAt ( x, y ) picture then
+                                Nothing
+                            else
+                                Just
+                                    (Piece
+                                        ( x, y )
+                                        { north = None
+                                        , east = None
+                                        , south = None
+                                        , west = None
+                                        }
+                                    )
                         )
             )
 

@@ -21,6 +21,7 @@ import Svg.Lazy as Lazy
 import Point exposing (Point)
 import JigsawPuzzle exposing (Piece(..), Hook(..))
 import PieceGroup
+import Picture exposing (Picture)
 
 
 type Msg
@@ -49,17 +50,32 @@ type alias Bounds =
 initialModel : Point -> Seed -> ( Model, Seed )
 initialModel screenSize seed =
     let
+        picture =
+            """
+***********
+***********
+***********
+***********
+***********
+***********
+***********"""
+                |> String.lines
+                |> List.tail
+                |> Maybe.withDefault []
+                |> String.join "\n"
+                |> Picture.fromString
+
         sizeX =
-            10
+            Picture.sizeX picture
 
         sizeY =
-            6
+            Picture.sizeY picture
 
         pieceSize =
             50
 
         ( groups, updatedSeed ) =
-            generateGroups sizeX sizeY pieceSize seed
+            generateGroups picture pieceSize seed
     in
         ( { offset = getOffset screenSize ( sizeX, sizeY ) pieceSize
           , sizeX = sizeX
@@ -212,11 +228,11 @@ isInSelection ( from, to ) pieceSize { pieces, position } =
             && (minSelectionY < maxGroupY)
 
 
-generateGroups : Int -> Int -> Int -> Seed -> ( List PieceGroup.Model, Seed )
-generateGroups sizeX sizeY pieceSize seed =
+generateGroups : Picture -> Int -> Seed -> ( List PieceGroup.Model, Seed )
+generateGroups picture pieceSize seed =
     let
         ( pieces, nextSeed ) =
-            JigsawPuzzle.generate sizeX sizeY seed
+            JigsawPuzzle.generate picture seed
 
         pieceMap =
             pieces
