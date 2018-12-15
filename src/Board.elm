@@ -51,18 +51,13 @@ initialModel : Point -> Seed -> ( Model, Seed )
 initialModel screenSize seed =
     let
         picture =
-            """
-***********
-***********
-***********
-***********
-***********
-***********
-***********"""
-                |> String.lines
-                |> List.tail
-                |> Maybe.withDefault []
-                |> String.join "\n"
+            """***********
+               ***********
+               ***********
+               ***********
+               ***********
+               ***********
+               ***********"""
                 |> Picture.fromString '*'
 
         sizeX =

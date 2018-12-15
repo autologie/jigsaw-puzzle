@@ -44,7 +44,8 @@ fromString filledChar source =
         |> String.lines
         |> Array.fromList
         |> Array.map
-            (String.toList
+            (String.trim
+                >> String.toList
                 >> Array.fromList
                 >> (Array.map (\c -> c == filledChar))
             )

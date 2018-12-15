@@ -1,4 +1,4 @@
-module JigsawPuzzle exposing (Piece(..), Hooks, Hook(..), generate)
+module JigsawPuzzle exposing (Piece(..), Hooks, Hook(..), generate, negate)
 
 import Random exposing (Seed)
 import Point exposing (Point)
