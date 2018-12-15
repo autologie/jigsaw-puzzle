@@ -133,14 +133,12 @@ suite =
                             [ Dict.size >> Expect.equal 35
                             , Dict.get ( 4, 2 )
                                 >> (Maybe.map
-                                        (\(Piece _ { north, east, south, west }) ->
-                                            Expect.all
-                                                [ \_ -> Expect.notEqual north None
-                                                , \_ -> Expect.equal east None
-                                                , \_ -> Expect.equal south None
-                                                , \_ -> Expect.notEqual west None
-                                                ]
-                                                ()
+                                        (Expect.all
+                                            [ \(Piece _ { north }) -> Expect.notEqual north None
+                                            , \(Piece _ { east }) -> Expect.equal east None
+                                            , \(Piece _ { south }) -> Expect.equal south None
+                                            , \(Piece _ { west }) -> Expect.notEqual west None
+                                            ]
                                         )
                                         >> Maybe.withDefault (Expect.fail "shouldn't be nothing")
                                    )
