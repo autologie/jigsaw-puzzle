@@ -63,7 +63,7 @@ initialModel screenSize seed =
                 |> List.tail
                 |> Maybe.withDefault []
                 |> String.join "\n"
-                |> Picture.fromString
+                |> Picture.fromString '*'
 
         sizeX =
             Picture.sizeX picture

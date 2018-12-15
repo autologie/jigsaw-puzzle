@@ -38,13 +38,13 @@ isVoidAt ( x, y ) picture =
            )
 
 
-fromString : String -> Picture
-fromString str =
-    str
+fromString : Char -> String -> Picture
+fromString filledChar source =
+    source
         |> String.lines
         |> Array.fromList
         |> Array.map
             (String.toList
                 >> Array.fromList
-                >> (Array.map (\c -> c == '*'))
+                >> (Array.map (\c -> c == filledChar))
             )
