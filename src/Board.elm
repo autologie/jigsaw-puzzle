@@ -90,7 +90,7 @@ view { offset, sizeX, sizeY, pieceSize, groups, selection } =
         ([ width "100vw"
          , height "100vh"
          , on "mousemove" (Decode.map MouseMove decodeMouseEvent)
-         , on "mousedown" (Decode.map (\position -> StartSelection position) decodeMouseEvent)
+         , on "mousedown" (Decode.map StartSelection decodeMouseEvent)
          ]
             ++ (selection
                     |> Maybe.map (\sel -> [ on "mouseup" (Decode.succeed (EndSelection sel)) ])
@@ -108,7 +108,7 @@ view { offset, sizeX, sizeY, pieceSize, groups, selection } =
                 []
              )
                 :: (groups
-                        |> List.sortBy (\{ zIndex } -> zIndex)
+                        |> List.sortBy .zIndex
                         |> List.map (groupView pieceSize)
                    )
             )
@@ -122,12 +122,8 @@ update msg model =
         , model.groups
             |> List.filterMap
                 (\group ->
-                    case group.dragHandle of
-                        Just handle ->
-                            Just ( group, handle )
-
-                        Nothing ->
-                            Nothing
+                    group.dragHandle
+                        |> Maybe.map (\handle -> ( group, handle ))
                 )
             |> List.head
         , msg
@@ -193,7 +189,7 @@ isDragging groups group =
 
 decodeMouseEvent : Decode.Decoder Point
 decodeMouseEvent =
-    Decode.map2 (\eventX eventY -> ( eventX, eventY ))
+    Decode.map2 Tuple.pair
         (Decode.at [ "offsetX" ] Decode.int)
         (Decode.at [ "offsetY" ] Decode.int)
 
@@ -213,7 +209,7 @@ isInSelection ( from, to ) pieceSize { pieces, position } =
         ( maxGroupX, maxGroupY ) =
             pieces
                 |> Dict.keys
-                |> List.foldl (\offset passed -> Point.max offset passed) Point.origin
+                |> List.foldl Point.max Point.origin
                 |> Point.scale pieceSize
                 |> Point.add position
     in
@@ -231,7 +227,7 @@ generateGroups picture pieceSize seed =
 
         pieceMap =
             pieces
-                |> List.map (\((Piece index hooks) as piece) -> ( index, piece ))
+                |> List.map (\((Piece index _) as piece) -> ( index, piece ))
                 |> Dict.fromList
 
         group =
@@ -264,7 +260,7 @@ updateOnStartDragging targetGroup touchPosition model =
     let
         maxZIndex =
             model.groups
-                |> List.map (\{ zIndex } -> zIndex)
+                |> List.map .zIndex
                 |> List.maximum
                 |> Maybe.withDefault targetGroup.zIndex
 
@@ -340,25 +336,23 @@ updateOnEndDragging targetGroup ({ pieceSize, tolerance, groups } as model) =
     let
         minZIndex =
             model.groups
-                |> List.map (\{ zIndex } -> zIndex)
+                |> List.map .zIndex
                 |> List.minimum
                 |> Maybe.withDefault targetGroup.zIndex
 
+        isMergeableWithTarget group =
+            (group /= targetGroup)
+                && PieceGroup.isMergeable pieceSize tolerance group targetGroup
+
         ( mergeableGroups, restGroups ) =
-            groups
-                |> List.partition
-                    (\group ->
-                        group
-                            /= targetGroup
-                            && PieceGroup.isMergeable pieceSize tolerance group targetGroup
-                    )
+            groups |> List.partition isMergeableWithTarget
 
         mergedGroup =
             PieceGroup.merge pieceSize targetGroup mergeableGroups
                 |> attemptToSettle pieceSize tolerance minZIndex
 
         updatedGroups =
-            (mergedGroup :: (restGroups |> List.filter (\g -> g /= targetGroup)))
+            (mergedGroup :: (restGroups |> List.filter ((/=) targetGroup)))
                 |> List.map
                     (\group ->
                         { group

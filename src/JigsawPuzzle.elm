@@ -85,26 +85,27 @@ generate picture seed =
 
 plainPieces : Picture -> List Piece
 plainPieces picture =
-    List.range 0 (Picture.sizeX picture - 1)
-        |> List.concatMap
-            (\x ->
-                List.range 0 (Picture.sizeY picture - 1)
-                    |> List.filterMap
-                        (\y ->
-                            if Picture.isVoidAt ( x, y ) picture then
-                                Nothing
-                            else
-                                Just
-                                    (Piece
-                                        ( x, y )
-                                        { north = None
-                                        , east = None
-                                        , south = None
-                                        , west = None
-                                        }
-                                    )
-                        )
-            )
+    let
+        maybePieceAt x y =
+            if Picture.isVoidAt ( x, y ) picture then
+                Nothing
+            else
+                Just
+                    (Piece
+                        ( x, y )
+                        { north = None
+                        , east = None
+                        , south = None
+                        , west = None
+                        }
+                    )
+    in
+        List.range 0 (Picture.sizeX picture - 1)
+            |> List.concatMap
+                (\x ->
+                    List.range 0 (Picture.sizeY picture - 1)
+                        |> List.filterMap (\y -> maybePieceAt x y)
+                )
 
 
 generateHooks : Seed -> ( Hooks, Seed )
@@ -200,8 +201,8 @@ negate hook =
         None ->
             None
 
-        Positive positionDeviation sizeDiviation ->
-            Negative -positionDeviation sizeDiviation
+        Positive positionDeviation sizeDeviation ->
+            Negative -positionDeviation sizeDeviation
 
-        Negative positionDeviation sizeDiviation ->
-            Positive -positionDeviation sizeDiviation
+        Negative positionDeviation sizeDeviation ->
+            Positive -positionDeviation sizeDeviation
