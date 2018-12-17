@@ -88,46 +88,37 @@ suite =
                         |> Expect.equal False
             , test "returns True/False according to the tolerance and the amount of gap" <|
                 \_ ->
-                    [ ( 2, ( 1, 0 ) )
-                    , ( 2, ( 2, 0 ) )
-                    , ( 2, ( 3, 0 ) )
-                    , ( 2, ( 0, 1 ) )
-                    , ( 2, ( 0, 2 ) )
-                    , ( 2, ( 0, 3 ) )
-                    , ( 2, ( 0, -1 ) )
-                    , ( 2, ( 0, -2 ) )
-                    , ( 2, ( 0, -3 ) )
-                    , ( 50, ( 30, 39 ) )
-                    , ( 50, ( 30, 40 ) )
-                    , ( 50, ( 30, 41 ) )
+                    [ ( 2, ( 1, 0 ), True )
+                    , ( 2, ( 2, 0 ), False )
+                    , ( 2, ( 3, 0 ), False )
+                    , ( 2, ( 0, 1 ), True )
+                    , ( 2, ( 0, 2 ), False )
+                    , ( 2, ( 0, 3 ), False )
+                    , ( 2, ( 0, -1 ), True )
+                    , ( 2, ( 0, -2 ), False )
+                    , ( 2, ( 0, -3 ), False )
+                    , ( 50, ( 30, 39 ), True )
+                    , ( 50, ( 30, 40 ), False )
+                    , ( 50, ( 30, 41 ), False )
                     ]
-                        |> List.map
-                            (\( tolerance, gap ) ->
-                                PieceGroup.isMergeable
-                                    100
-                                    tolerance
-                                    { group
-                                        | position = Point.add ( 100, 0 ) gap
-                                        , pieces =
-                                            Dict.fromList
-                                                [ ( ( 0, 0 ), Piece ( 1, 0 ) hooks )
-                                                ]
-                                    }
-                                    group
+                        |> List.all
+                            (\( tolerance, gap, expected ) ->
+                                let
+                                    actual =
+                                        PieceGroup.isMergeable
+                                            100
+                                            tolerance
+                                            { group
+                                                | position = Point.add ( 100, 0 ) gap
+                                                , pieces =
+                                                    Dict.fromList
+                                                        [ ( ( 0, 0 ), Piece ( 1, 0 ) hooks )
+                                                        ]
+                                            }
+                                            group
+                                in
+                                    actual == expected
                             )
-                        |> Expect.equal
-                            [ True
-                            , False
-                            , False
-                            , True
-                            , False
-                            , False
-                            , True
-                            , False
-                            , False
-                            , True
-                            , False
-                            , False
-                            ]
+                        |> Expect.equal True
             ]
         ]
