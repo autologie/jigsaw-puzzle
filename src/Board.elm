@@ -9,10 +9,10 @@ module Board
         , withScreenSize
         )
 
-import Json.Decode as Decode exposing (Decoder)
+import Json.Decode as Decode
 import Random exposing (Seed)
 import Svg exposing (..)
-import Dict exposing (Dict)
+import Dict
 import Html exposing (Html)
 import Svg.Keyed
 import Svg.Attributes exposing (..)
@@ -98,7 +98,7 @@ view { offset, sizeX, sizeY, pieceSize, groups, selection } =
                )
         )
         [ Svg.Keyed.node "g"
-            [ transform ("translate" ++ (Point.toString offset)) ]
+            [ transform ("translate" ++ Point.toString offset) ]
             (( "board"
              , rect
                 [ Svg.Attributes.style "fill: #eee;"
@@ -162,11 +162,10 @@ groupView pieceSize group =
                 PieceGroup.EndDragging ->
                     EndDragging
     in
-        (Lazy.lazy2
+        Lazy.lazy2
             PieceGroup.view
             pieceSize
             group
-        )
             |> Svg.map toMsg
             |> (\element -> ( PieceGroup.id group, element ))
 
@@ -369,10 +368,9 @@ attemptToSettle : Int -> Float -> Int -> PieceGroup.Model -> PieceGroup.Model
 attemptToSettle pieceSize tolerance minZIndex group =
     let
         isCorrectDrop =
-            (Point.distance
+            Point.distance
                 group.position
                 (PieceGroup.defaultPosition pieceSize group)
-            )
                 < tolerance
     in
         if isCorrectDrop then

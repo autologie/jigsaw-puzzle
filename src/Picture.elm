@@ -47,5 +47,5 @@ fromString filledChar source =
             (String.trim
                 >> String.toList
                 >> Array.fromList
-                >> (Array.map ((==) filledChar))
+                >> Array.map ((==) filledChar)
             )

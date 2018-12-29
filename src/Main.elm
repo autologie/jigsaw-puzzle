@@ -2,9 +2,8 @@ module Main exposing (main)
 
 import Browser
 import Browser.Events
-import Dict exposing (Dict)
-import Random exposing (Seed)
-import Html exposing (Html)
+import Random
+import Html
 import Html.Attributes
 import Html.Events exposing (..)
 import Board

@@ -68,7 +68,7 @@ distance ( p1X, p1Y ) ( p2X, p2Y ) =
 toString : Point -> String
 toString ( x, y ) =
     "("
-        ++ (String.fromInt x)
+        ++ String.fromInt x
         ++ ","
-        ++ (String.fromInt y)
+        ++ String.fromInt y
         ++ ")"

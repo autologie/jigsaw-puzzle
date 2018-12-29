@@ -1,7 +1,6 @@
 module Piece exposing (Msg(..), view)
 
-import Json.Decode as Decode exposing (Decoder)
-import Random exposing (Seed)
+import Json.Decode as Decode
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
 import Svg.Events exposing (..)
@@ -66,14 +65,14 @@ type alias PathStop =
 
 
 piecePath : Int -> Piece -> String
-piecePath pieceSize (Piece position hooks) =
+piecePath pieceSize (Piece _ hooks) =
     List.concat
         [ sidePath hooks.north True
         , sidePath hooks.east False |> List.map (translate (\( x, y ) -> ( 1 - y, x )))
         , sidePath hooks.south False |> List.map (translate (\( x, y ) -> ( 1 - x, 1 - y )))
         , sidePath hooks.west False |> List.map (translate (\( x, y ) -> ( y, 1 - x )))
         ]
-        |> List.map (translate (\( x, y ) -> ( x * (toFloat pieceSize), y * (toFloat pieceSize) )))
+        |> List.map (translate (\( x, y ) -> ( x * toFloat pieceSize, y * toFloat pieceSize )))
         |> List.map (translate (\( x, y ) -> ( toFloat (round x), toFloat (round y) )))
         |> List.map
             (\pathElement ->

@@ -10,13 +10,10 @@ module PieceGroup
         , isMergeable
         )
 
-import Json.Decode as Decode exposing (Decoder)
-import Random exposing (Seed)
 import Svg exposing (..)
 import Set
 import Dict exposing (Dict)
-import Html exposing (Html)
-import Html.Attributes
+import Html
 import Svg.Attributes exposing (..)
 import Svg.Events exposing (..)
 import Svg.Lazy as Lazy
@@ -51,7 +48,7 @@ view pieceSize group =
                     EndDragging
     in
         g
-            [ transform ("translate" ++ (Point.toString group.position)) ]
+            [ transform ("translate" ++ Point.toString group.position) ]
             (group.pieces
                 |> Dict.map (Lazy.lazy4 Piece.view pieceSize group.isSelected)
                 |> Dict.values
@@ -167,7 +164,7 @@ isMergeable pieceSize tolerance group anotherGroup =
                             diffOfIndex =
                                 pieceIndex |> Point.sub anotherPieceIndex
                         in
-                            (List.member diffOfIndex [ ( 0, 1 ), ( 0, -1 ), ( 1, 0 ), ( -1, 0 ) ])
+                            List.member diffOfIndex [ ( 0, 1 ), ( 0, -1 ), ( 1, 0 ), ( -1, 0 ) ]
                                 && (diffOfIndex
                                         |> Point.scale pieceSize
                                         |> Point.add anotherPosition

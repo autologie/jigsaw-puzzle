@@ -63,7 +63,7 @@ generate picture seed =
                 else
                     hooks
 
-        reducePieces (Piece (( indexX, indexY ) as index) hooks) ( pieces, mySeed ) =
+        reducePieces (Piece (( indexX, indexY ) as index) _) ( pieces, mySeed ) =
             let
                 ( generatedHooks, updatedSeed ) =
                     generateHooks mySeed
@@ -118,7 +118,7 @@ generateHooks seed0 =
             Random.float -maxDeviation maxDeviation
 
         hookTypeGenerator =
-            Random.uniform (Positive 0 0) [ (Negative 0 0) ]
+            Random.uniform (Positive 0 0) [ Negative 0 0 ]
 
         withDeviation ( hook, seed00 ) =
             let
